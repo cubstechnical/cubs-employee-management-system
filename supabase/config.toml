@@ -1,0 +1,22 @@
+
+[functions.backblaze-signed-url]
+enabled = true
+verify_jwt = true
+import_map = "./functions/backblaze-signed-url/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/backblaze-signed-url/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/backblaze-signed-url/*.html" ]
+
+[functions.backblaze-handler]
+enabled = true
+verify_jwt = true
+import_map = "./functions/backblaze-handler/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/backblaze-handler/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/backblaze-handler/*.html" ]
