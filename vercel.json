@@ -17,9 +17,21 @@
     }
   ],
   "env": {
-    "EXPO_PUBLIC_SUPABASE_URL": "@expo_public_supabase_url",
-    "EXPO_PUBLIC_SUPABASE_ANON_KEY": "@expo_public_supabase_anon_key",
-    "EXPO_PUBLIC_SENDGRID_API_KEY": "@expo_public_sendgrid_api_key",
-    "EXPO_PUBLIC_SENDGRID_FROM_EMAIL": "@expo_public_sendgrid_from_email"
+    "EXPO_PUBLIC_SUPABASE_URL": "https://blbybcxkfcyxrwrlldtd.supabase.co",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsYnliY3hrZmN5eHJ3cmxsZHRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk4MDk0ODEsImV4cCI6MjA1NTM4NTQ4MX0.3AGgW9sEIdo_OXUAhPoeQ9FjB1ZAmm-WJ3qyg52nL2E",
+    "EXPO_PUBLIC_SENDGRID_API_KEY": "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",
+    "EXPO_PUBLIC_SENDGRID_FROM_EMAIL": "rajarajeswaran2001@gmail.com",
+    "EXPO_PUBLIC_B2_BUCKET_NAME": "VisaDocsEU",
+    "EXPO_PUBLIC_B2_ENDPOINT": "https://s3.us-west-002.backblazeb2.com",
+    "EXPO_PUBLIC_B2_KEY_ID": "003de195e9b8c4d0000000002",
+    "EXPO_PUBLIC_B2_APPLICATION_KEY": "K002VxbB+VIUc3bXKTHxBwRJ13E1YVk",
+    "EXPO_PUBLIC_B2_BUCKET_ID": "bd1e6159c59e29bb985c041d",
+    "EXPO_PUBLIC_ENV": "production",
+    "EXPO_PUBLIC_APP_NAME": "CUBS Employee Management System",
+    "EXPO_PUBLIC_APP_VERSION": "1.0.0",
+    "EXPO_PUBLIC_API_URL": "https://cubs-employee-management.vercel.app",
+    "EXPO_PUBLIC_ENABLE_NOTIFICATIONS": "true",
+    "EXPO_PUBLIC_ENABLE_DOCUMENT_UPLOAD": "true",
+    "EXPO_PUBLIC_ENABLE_EMAIL_NOTIFICATIONS": "true"
   }
 } 
