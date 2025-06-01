@@ -35,20 +35,20 @@ A comprehensive employee management application built with React Native/Expo for
 ## 🔧 Installation
 
 1. **Clone the repository**
-   ```bash
+```bash
    git clone https://github.com/YOUR_USERNAME/cubs-employee-management.git
-   cd cubs-employee-management
-   ```
+cd cubs-employee-management
+```
 
 2. **Install dependencies**
    ```bash
-   yarn install
-   ```
+yarn install
+```
 
 3. **Environment Setup**
    Create a `.env` file in the root directory:
    ```env
-   # Supabase Configuration
+# Supabase Configuration
    EXPO_PUBLIC_SUPABASE_URL=your-supabase-url
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
 
@@ -56,7 +56,7 @@ A comprehensive employee management application built with React Native/Expo for
    EXPO_PUBLIC_SENDGRID_API_KEY=your-sendgrid-api-key
    EXPO_PUBLIC_SENDGRID_FROM_EMAIL=your-from-email
 
-   # Backblaze B2 Configuration
+# Backblaze B2 Configuration
    EXPO_PUBLIC_B2_API_URL=your-b2-api-url
    EXPO_PUBLIC_B2_BUCKET_NAME=your-bucket-name
    EXPO_PUBLIC_B2_ENDPOINT=your-b2-endpoint
@@ -87,7 +87,7 @@ yarn web      # Web
 ```
 
 ### Production Build
-```bash
+   ```bash
 # Web build
 yarn build
 
@@ -153,7 +153,7 @@ Key tables:
 ## 📈 Development
 
 ### Code Quality
-```bash
+   ```bash
 # Type checking
 yarn type-check
 

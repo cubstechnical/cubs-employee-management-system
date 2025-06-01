@@ -26,6 +26,7 @@ import { useEmployees } from '../../hooks/useEmployees';
 import AdminLayout from '../../components/AdminLayout';
 import { CustomTheme } from '../../theme';
 import { Employee } from '../../types/employee';
+import { sendVisaExpiryReminders } from '../../services/emailService';
 
 const { width } = Dimensions.get('window');
 
@@ -117,14 +118,16 @@ export default function EmployeesScreen() {
   useEffect(() => {
     // Entry animations
     Animated.parallel([
-      Animated.timing(fadeAnimation, {
+      Animated.spring(fadeAnimation, {
         toValue: 1,
-        duration: 600,
+        tension: 40,
+        friction: 7,
         useNativeDriver: true,
       }),
-      Animated.timing(slideAnimation, {
+      Animated.spring(slideAnimation, {
         toValue: 0,
-        duration: 600,
+        tension: 50,
+        friction: 8,
         useNativeDriver: true,
       }),
     ]).start();
@@ -422,6 +425,53 @@ export default function EmployeesScreen() {
     );
   };
 
+  const handleBulkSendVisaReminder = async () => {
+    if (selectedEmployees.length === 0) {
+      setSnackbar('No employees selected.');
+      return;
+    }
+
+    try {
+      setRefreshing(true);
+      setSnackbar(`Sending reminders to ${selectedEmployees.length} employee(s)...`);
+
+      // Get selected employee objects
+      const selectedEmployeeObjects = employees?.filter(emp => 
+        selectedEmployees.includes(emp.id)
+      ) || [];
+
+      if (selectedEmployeeObjects.length === 0) {
+        setSnackbar('No valid employees found for sending reminders.');
+        return;
+      }
+
+      // Send visa expiry reminders
+      const results = await sendVisaExpiryReminders(selectedEmployeeObjects);
+
+      // Show results
+      if (results.sent > 0) {
+        triggerSuccessAnimation();
+        if (results.failed > 0) {
+          setSnackbar(`Sent ${results.sent} reminders successfully, ${results.failed} failed.`);
+        } else {
+          setSnackbar(`Successfully sent reminders to ${results.sent} employee(s)! 📧`);
+        }
+      } else {
+        setSnackbar(`Failed to send reminders. ${results.failed} errors occurred.`);
+      }
+
+      // Clear selection
+      setSelectedEmployees([]);
+      setShowBulkActions(false);
+
+    } catch (error) {
+      console.error('Error sending visa reminders:', error);
+      setSnackbar('Failed to send reminders. Please check your email configuration and try again.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const resetForm = () => {
     setNewEmployee({
       name: '',
@@ -493,82 +543,105 @@ export default function EmployeesScreen() {
     router.push(`/(admin)/documents?employeeId=${employeeId}`);
   };
 
-  // Dramatically improved table view with enhanced mobile responsiveness
+  // Dramatically improved table view with full height and better styling
   const renderTableView = () => (
-    <Surface style={[styles.modernTableContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
-      <View style={styles.tableHeader}>
-        <Text variant="titleLarge" style={[styles.tableTitle, { color: CONSISTENT_COLORS.primary }]}>
-          📊 Employee Database ({filteredEmployees.length} employees)
-        </Text>
-        
-        {/* Bulk Actions Bar */}
-        {showBulkActions && (
-          <Surface style={[styles.bulkActionsBar, { backgroundColor: CONSISTENT_COLORS.primary + '10' }]} elevation={2}>
-            <Text variant="bodyMedium" style={{ color: CONSISTENT_COLORS.primary, fontWeight: 'bold' }}>
-              {selectedEmployees.length} employee(s) selected
-            </Text>
-            <View style={styles.bulkActions}>
-              <Button
-                mode="contained"
-                onPress={handleBulkDelete}
-                style={[styles.bulkActionButton, { backgroundColor: CONSISTENT_COLORS.error }]}
-                labelStyle={{ color: 'white', fontSize: 12 }}
-                icon="delete"
-                compact
-              >
-                Delete Selected
-              </Button>
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  setSelectedEmployees([]);
-                  setShowBulkActions(false);
-                }}
-                style={[styles.bulkActionButton, { borderColor: CONSISTENT_COLORS.gray }]}
-                labelStyle={{ color: CONSISTENT_COLORS.gray, fontSize: 12 }}
-                compact
-              >
-                Cancel
-              </Button>
-            </View>
-          </Surface>
-        )}
-      </View>
-      
-      {/* Responsive Table without horizontal scroll */}
-      <View style={styles.responsiveTable}>
-        {/* Modern Table Header */}
-        <View style={[styles.modernTableHeader, { backgroundColor: CONSISTENT_COLORS.primary + '15' }]}>
-          <View style={[styles.tableCell, styles.selectColumn]}>
-            <IconButton
-              icon={selectedEmployees.length === filteredEmployees.length ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              size={20}
-              iconColor={CONSISTENT_COLORS.primary}
-              onPress={handleSelectAllEmployees}
-            />
-          </View>
-          <View style={[styles.tableCell, styles.employeeColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>👤 Employee</Text>
-          </View>
-          <View style={[styles.tableCell, styles.companyColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>🏢 Company</Text>
-          </View>
-          <View style={[styles.tableCell, styles.compactColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>💼 Role</Text>
-          </View>
-          <View style={[styles.tableCell, styles.compactColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>📞 Contact</Text>
-          </View>
-          <View style={[styles.tableCell, styles.compactColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>🛂 Visa Status</Text>
-          </View>
-          <View style={[styles.tableCell, styles.actionsColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>⚡ Actions</Text>
-          </View>
+    <View style={styles.fullHeightTableContainer}>
+      <Surface style={[styles.modernTableContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
+        {/* Table Header with Actions */}
+        <View style={styles.tableHeader}>
+          <Text variant="titleLarge" style={[styles.tableTitle, { color: CONSISTENT_COLORS.primary }]}>
+            📊 Employee Database ({filteredEmployees.length} employees)
+          </Text>
+          
+          {/* Bulk Actions Bar */}
+          {showBulkActions && (
+            <Surface style={[styles.bulkActionsBar, { backgroundColor: CONSISTENT_COLORS.primary + '10' }]} elevation={2}>
+              <Text variant="bodyMedium" style={{ color: CONSISTENT_COLORS.primary, fontWeight: 'bold' }}>
+                {selectedEmployees.length} employee(s) selected
+              </Text>
+              <View style={styles.bulkActions}>
+                <Button
+                  mode="contained"
+                  onPress={handleBulkSendVisaReminder}
+                  style={[styles.bulkActionButton, { backgroundColor: CONSISTENT_COLORS.info, marginRight: 8 }]}
+                  labelStyle={{ color: 'white', fontSize: 12 }}
+                  icon="email-fast"
+                  compact
+                >
+                  Send Reminder
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleBulkDelete}
+                  style={[styles.bulkActionButton, { backgroundColor: CONSISTENT_COLORS.error }]}
+                  labelStyle={{ color: 'white', fontSize: 12 }}
+                  icon="delete"
+                  compact
+                >
+                  Delete Selected
+                </Button>
+                <Button
+                  mode="outlined"
+                  onPress={() => {
+                    setSelectedEmployees([]);
+                    setShowBulkActions(false);
+                  }}
+                  style={[styles.bulkActionButton, { borderColor: CONSISTENT_COLORS.gray }]}
+                  labelStyle={{ color: CONSISTENT_COLORS.gray, fontSize: 12 }}
+                  compact
+                >
+                  Cancel
+                </Button>
+              </View>
+            </Surface>
+          )}
         </View>
+        
+        {/* Scrollable Table Content */}
+        <ScrollView 
+          style={styles.tableScrollView}
+          showsVerticalScrollIndicator={true}
+          bounces={true}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={handleRefresh}
+              colors={[CONSISTENT_COLORS.primary]}
+              tintColor={CONSISTENT_COLORS.primary}
+            />
+          }
+        >
+          {/* Modern Table Header */}
+          <View style={[styles.modernTableHeader, { backgroundColor: CONSISTENT_COLORS.primary + '15' }]}>
+            <View style={[styles.tableCell, styles.selectColumn]}>
+              <IconButton
+                icon={selectedEmployees.length === filteredEmployees.length ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                size={20}
+                iconColor={CONSISTENT_COLORS.primary}
+                onPress={handleSelectAllEmployees}
+              />
+            </View>
+            <View style={[styles.tableCell, styles.employeeColumn]}>
+              <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>👤 Employee</Text>
+            </View>
+            <View style={[styles.tableCell, styles.companyColumn]}>
+              <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>🏢 Company</Text>
+            </View>
+            <View style={[styles.tableCell, styles.compactColumn]}>
+              <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>💼 Role</Text>
+            </View>
+            <View style={[styles.tableCell, styles.compactColumn]}>
+              <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>📞 Contact</Text>
+            </View>
+            <View style={[styles.tableCell, styles.compactColumn]}>
+              <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>🛂 Visa Status</Text>
+            </View>
+            <View style={[styles.tableCell, styles.actionsColumn]}>
+              <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>⚡ Actions</Text>
+            </View>
+          </View>
 
-        {/* Modern Table Rows with Enhanced Mobile Support */}
-        <ScrollView style={styles.tableScrollView} showsVerticalScrollIndicator={true}>
+          {/* Modern Table Rows with Enhanced Mobile Support */}
           {filteredEmployees.map((employee, index) => (
             <TouchableOpacity
               key={employee.id}
@@ -586,10 +659,6 @@ export default function EmployeesScreen() {
                       : index % 2 === 0 
                         ? theme.colors.surface 
                         : theme.colors.surfaceVariant + '20',
-                    opacity: fadeAnimation,
-                    transform: [{
-                      scale: pressedRow === employee.id ? 0.98 : 1
-                    }],
                     borderLeftColor: employee.is_active 
                       ? CONSISTENT_COLORS.active 
                       : CONSISTENT_COLORS.gray,
@@ -610,7 +679,7 @@ export default function EmployeesScreen() {
                   />
                 </View>
 
-                {/* Employee Info - Compact */}
+                {/* Employee Info - Compact with reduced spacing */}
                 <View style={[styles.tableCell, styles.employeeColumn]}>
                   <View style={styles.employeeInfoContainer}>
                     <Text style={[styles.employeeName, { color: CONSISTENT_COLORS.primary }]} numberOfLines={1}>
@@ -622,9 +691,9 @@ export default function EmployeesScreen() {
                   </View>
                 </View>
 
-                {/* Company - Now with full space */}
+                {/* Company - Now with more space and no truncation */}
                 <View style={[styles.tableCell, styles.companyColumn]}>
-                  <Text style={[styles.cellMainText, { color: theme.colors.onSurface }]} numberOfLines={1}>
+                  <Text style={[styles.cellMainText, { color: theme.colors.onSurface }]} numberOfLines={2}>
                     {employee.company_name || 'No Company'}
                   </Text>
                   <Text style={[styles.cellSubText, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
@@ -710,14 +779,7 @@ export default function EmployeesScreen() {
                       style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.error + '15' }]}
                       onPress={(e) => {
                         e.stopPropagation();
-                        Alert.alert(
-                          'Confirm Delete',
-                          `Are you sure you want to delete ${employee.name}?`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => handleDeleteEmployee(employee.id) }
-                          ]
-                        );
+                        handleDeleteEmployee(employee.id);
                       }}
                     />
                   </View>
@@ -725,39 +787,32 @@ export default function EmployeesScreen() {
               </Animated.View>
             </TouchableOpacity>
           ))}
+          
+          {/* Bottom spacing for FAB */}
+          <View style={{ height: 100 }} />
         </ScrollView>
-      </View>
-    </Surface>
+      </Surface>
+    </View>
   );
 
   return (
-    <AdminLayout 
-      title="Employees" 
-      currentRoute="/admin/employees"
-      showBackButton={false}
-      onBackPress={() => router.push('/(admin)/dashboard')}
-    >
-      <Animated.View style={[
-        styles.container,
-        {
-          opacity: fadeAnimation,
-          transform: [{ translateY: slideAnimation }]
-        }
-      ]}>
-        {/* Modern Header Controls */}
-        <Surface style={[styles.headerControls, { backgroundColor: theme.colors.surface }]} elevation={2}>
-          <Searchbar
-            placeholder="Search employees by name, ID, trade, company..."
-            onChangeText={setSearchQuery}
-            value={searchQuery}
-            style={[styles.modernSearchBar, { backgroundColor: theme.colors.surfaceVariant }]}
-            inputStyle={{ color: theme.colors.onSurface }}
-            iconColor={CONSISTENT_COLORS.primary}
-          />
+    <AdminLayout title="Employees" currentRoute="/admin/employees">
+      <View style={[styles.container]}>
+        {/* Enhanced Header with Search and Filters */}
+        <Surface style={styles.headerControls} elevation={2}>
+          <View style={styles.searchContainer}>
+            <Searchbar
+              placeholder="Search employees..."
+              onChangeText={setSearchQuery}
+              value={searchQuery}
+              style={styles.modernSearchBar}
+              iconColor={CONSISTENT_COLORS.primary}
+            />
+          </View>
           
           <View style={styles.filterContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollView}>
-              <View style={styles.filterButtons}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterButtons}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Chip
                   selected={filterStatus === 'all'}
                   onPress={() => setFilterStatus('all')}
@@ -765,13 +820,13 @@ export default function EmployeesScreen() {
                   textStyle={{ color: filterStatus === 'all' ? CONSISTENT_COLORS.primary : theme.colors.onSurface }}
                   showSelectedOverlay
                 >
-                  All ({employees?.length || 0})
+                  All ({filteredEmployees.length})
                 </Chip>
                 <Chip
                   selected={filterStatus === 'active'}
                   onPress={() => setFilterStatus('active')}
-                  style={[styles.filterChip, { backgroundColor: filterStatus === 'active' ? CONSISTENT_COLORS.success + '20' : theme.colors.surface }]}
-                  textStyle={{ color: filterStatus === 'active' ? CONSISTENT_COLORS.success : theme.colors.onSurface }}
+                  style={[styles.filterChip, { backgroundColor: filterStatus === 'active' ? CONSISTENT_COLORS.active + '20' : theme.colors.surface }]}
+                  textStyle={{ color: filterStatus === 'active' ? CONSISTENT_COLORS.active : theme.colors.onSurface }}
                   showSelectedOverlay
                 >
                   Active ({employees?.filter(e => e.is_active).length || 0})
@@ -799,59 +854,49 @@ export default function EmployeesScreen() {
           </View>
         </Surface>
 
-        {/* Content */}
-        <ScrollView
-          style={styles.content}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-          }
-        >
-          {isLoading ? (
-            <Animated.View style={[
-              styles.loadingContainer,
-              {
-                opacity: loadingAnimation,
-              }
-            ]}>
-              <Animated.View style={{
-                transform: [{
-                  rotate: loadingAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0deg', '360deg'],
-                  })
-                }]
-              }}>
-                <ActivityIndicator size="large" color={CONSISTENT_COLORS.primary} />
-              </Animated.View>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
-                Loading employees...
-              </Text>
+        {/* Content with full height and proper scrolling */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <Animated.View style={{
+              transform: [{
+                rotate: loadingAnimation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '360deg'],
+                })
+              }]
+            }}>
+              <ActivityIndicator size="large" color={CONSISTENT_COLORS.primary} />
             </Animated.View>
-          ) : filteredEmployees.length > 0 ? (
-            renderTableView()
-          ) : (
-            <View style={styles.emptyState}>
-              <IconButton icon="account-group" size={64} iconColor={theme.colors.onSurfaceVariant} />
-              <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
-                No employees found
-              </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 8 }}>
-                {searchQuery ? 'Try adjusting your search criteria' : 'Add your first employee to get started'}
-              </Text>
-              {!searchQuery && (
-                <Button 
-                  mode="contained" 
-                  onPress={() => setShowAddModal(true)}
-                  style={[styles.modernButton, { marginTop: 24, backgroundColor: CONSISTENT_COLORS.primary }]}
-                  labelStyle={{ color: 'white', fontWeight: '600' }}
-                  icon="plus"
-                >
-                  Add Employee
-                </Button>
-              )}
-            </View>
-          )}
-        </ScrollView>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
+              Loading employees...
+            </Text>
+          </View>
+        ) : filteredEmployees.length > 0 ? (
+          <Animated.View style={[styles.content, { opacity: fadeAnimation }]}>
+            {renderTableView()}
+          </Animated.View>
+        ) : (
+          <View style={styles.emptyState}>
+            <IconButton icon="account-group" size={64} iconColor={theme.colors.onSurfaceVariant} />
+            <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
+              No employees found
+            </Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 8 }}>
+              {searchQuery ? 'Try adjusting your search criteria' : 'Add your first employee to get started'}
+            </Text>
+            {!searchQuery && (
+              <Button 
+                mode="contained" 
+                onPress={() => setShowAddModal(true)}
+                style={[styles.modernButton, { marginTop: 24, backgroundColor: CONSISTENT_COLORS.primary }]}
+                labelStyle={{ color: 'white', fontWeight: '600' }}
+                icon="plus"
+              >
+                Add Employee
+              </Button>
+            )}
+          </View>
+        )}
 
         {/* Beautiful Floating Action Button */}
         <FAB
@@ -1162,7 +1207,7 @@ export default function EmployeesScreen() {
         >
           {snackbar}
         </Snackbar>
-      </Animated.View>
+      </View>
     </AdminLayout>
   );
 }
@@ -1177,12 +1222,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(220, 20, 60, 0.1)', // Ferrari red tint
-    elevation: 2,
-    shadowColor: '#DC143C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    borderBottomColor: 'rgba(197, 48, 48, 0.1)',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#C53030',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+      web: {
+        boxShadow: '0px 2px 4px rgba(197,48,48,0.1)',
+      }
+    })
   },
   searchContainer: {
     marginBottom: 16,
@@ -1210,7 +1264,7 @@ const styles = StyleSheet.create({
   modernFilterButton: {
     borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: '#DC143C', // Ferrari red
+    borderColor: '#C53030', // Updated to new professional red
   },
   viewToggle: {
     flexDirection: 'row',
@@ -1218,11 +1272,10 @@ const styles = StyleSheet.create({
   },
   modernViewButton: {
     borderRadius: 8,
-    backgroundColor: 'rgba(220, 20, 60, 0.1)', // Ferrari red tint
+    backgroundColor: 'rgba(197, 48, 48, 0.1)', // Updated to new professional red
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -1309,166 +1362,116 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   
-  // Modern Table Styles - Enhanced for Mobile Responsiveness with Beautiful Borders
+  // Modern Table Styles - Enhanced for full height and better UI
   modernTableContainer: {
-    borderRadius: 16,
-    paddingBottom: 100,
-    overflow: 'hidden',
-    marginHorizontal: 0,
     flex: 1,
-    minHeight: 400,
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    shadowColor: '#DC143C',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(220, 20, 60, 0.1)',
+    borderRadius: 16,
+    overflow: 'hidden',
+    margin: 16,
+    marginBottom: 0,
   },
   tableHeader: {
     padding: 20,
-    borderBottomWidth: 2,
-    borderBottomColor: 'rgba(220, 20, 60, 0.2)',
-    backgroundColor: 'linear-gradient(135deg, #ffffff 0%, #fef7f7 100%)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
   },
   tableTitle: {
-    marginBottom: 8,
     fontWeight: 'bold',
-    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  tableSubtitle: {
-    fontSize: 13,
-    opacity: 0.8,
-    fontStyle: 'italic',
-  },
-  horizontalScrollView: {
+  tableScrollView: {
     flex: 1,
-    overflow: 'scroll',
-  },
-  horizontalScrollContent: {
-    padding: 16,
-    minWidth: '100%',
-  },
-  verticalScrollView: {
-    flex: 1,
-    overflow: 'scroll',
     maxHeight: '100%',
   },
-  tableWrapper: {
-    minWidth: Math.max(width * 1.8, 1200),
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
   modernTableHeader: {
-    height: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     borderBottomWidth: 2,
-    borderBottomColor: 'rgba(220, 20, 60, 0.3)',
-    backgroundColor: 'linear-gradient(135deg, #DC143C 0%, #B91C3C 100%)',
-    shadowColor: '#DC143C',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    borderBottomColor: 'rgba(0,0,0,0.1)',
+    zIndex: 1,
   },
   modernTableRow: {
-    minHeight: 80,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(220, 20, 60, 0.08)',
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    marginVertical: 1,
-    borderRadius: 0,
-    borderLeftWidth: 3,
-    borderLeftColor: 'transparent',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    minHeight: 82,
   },
   tableCell: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     justifyContent: 'center',
-    borderRightWidth: 1,
-    borderRightColor: 'rgba(220, 20, 60, 0.05)',
+  },
+  selectColumn: {
+    width: 50,
+    alignItems: 'center',
   },
   employeeColumn: {
-    width: 160,
-    minWidth: 160,
+    flex: 1.8,
+    minWidth: 130,
   },
   companyColumn: {
-    width: 200,
-    minWidth: 200,
-  },
-  standardColumn: {
-    width: 160,
+    flex: 2.2,
     minWidth: 160,
   },
-  actionsColumn: {
-    width: 100,
+  compactColumn: {
+    flex: 1,
     minWidth: 100,
-    borderRightWidth: 0,
+  },
+  actionsColumn: {
+    width: 110,
+    alignItems: 'center',
   },
   headerText: {
     fontWeight: 'bold',
-    fontSize: 15,
-    color: 'white',
+    fontSize: 12,
+    textAlign: 'center',
   },
   employeeInfoContainer: {
     flex: 1,
   },
   employeeName: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: 'bold',
+    fontSize: 14,
+    marginBottom: 1,
   },
   employeeId: {
-    fontSize: 11,
+    fontSize: 12,
     opacity: 0.8,
   },
   cellMainText: {
     fontSize: 13,
     fontWeight: '500',
-    marginBottom: 4,
-    lineHeight: 18,
+    marginBottom: 2,
+    lineHeight: 16,
   },
   cellSubText: {
-    fontSize: 10,
+    fontSize: 11,
     opacity: 0.7,
-    lineHeight: 14,
   },
   modernChip: {
-    borderRadius: 16,
+    height: 24,
     marginBottom: 4,
-    paddingHorizontal: 8,
   },
   chipText: {
     fontSize: 10,
-    fontWeight: '500',
+    fontWeight: 'bold',
   },
   modernActionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
-    gap: 6,
-    paddingVertical: 4,
+    gap: 4,
   },
   actionBtn: {
-    width: 36,
-    height: 36,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     margin: 0,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   successOverlay: {
     position: 'absolute',
@@ -1516,21 +1519,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 4,
   },
-  responsiveTable: {
+  fullHeightTableContainer: {
     flex: 1,
-    overflow: 'scroll',
-  },
-  selectColumn: {
-    width: 40,
-    minWidth: 40,
-  },
-  compactColumn: {
-    width: 110,
-    minWidth: 110,
-  },
-  tableScrollView: {
-    flex: 1,
-    overflow: 'scroll',
+    paddingHorizontal: 0,
   },
 });
 

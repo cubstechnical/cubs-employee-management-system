@@ -135,6 +135,11 @@ DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles
     FOR UPDATE USING (auth.uid() = id);
 
+-- Add missing policy for profile creation during authentication
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+CREATE POLICY "Users can insert own profile" ON public.profiles
+    FOR INSERT WITH CHECK (auth.uid() = id);
+
 -- Employees policies
 DROP POLICY IF EXISTS "Admins can manage all employees" ON public.employees;
 CREATE POLICY "Admins can manage all employees" ON public.employees

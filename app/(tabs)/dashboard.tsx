@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Dimensions } from 'react-native';
+import { StyleSheet, ScrollView, View, Dimensions, Platform } from 'react-native';
 import { 
   Text, 
   Card, 
@@ -150,11 +150,20 @@ export default function DashboardScreen() {
       alignItems: 'center',
       padding: 24,
       backgroundColor: safeThemeAccess.colors(theme, 'surface'),
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 5,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 5,
+        },
+        web: {
+          boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+        }
+      })
     },
     headerText: {
       fontSize: 20,

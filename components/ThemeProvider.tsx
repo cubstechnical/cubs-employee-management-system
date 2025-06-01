@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Provider as PaperProvider, Portal, MD3LightTheme, MD3DarkTheme } from 'react-native-paper';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lightTheme, darkTheme } from '../theme';
+import { lightTheme, darkTheme, CustomTheme } from '../theme';
+import { Platform } from 'react-native';
 
 // Theme Context - Single source of truth
 interface ThemeContextType {
@@ -32,6 +33,47 @@ export const useAppTheme = () => {
     };
   }
   return context;
+};
+
+// Add animation configuration
+export const APP_ANIMATIONS = {
+  // Smooth transition durations
+  duration: {
+    short: 200,
+    medium: 300,
+    long: 500,
+    extraLong: 800
+  },
+  
+  // Easing curves
+  easing: {
+    standard: 'ease',
+    emphasized: 'cubic-bezier(0.2, 0, 0, 1)',
+    accelerate: 'cubic-bezier(0.3, 0, 1, 1)',
+    decelerate: 'cubic-bezier(0, 0, 0.2, 1)'
+  },
+  
+  // Common animation configs
+  fadeIn: {
+    duration: 300,
+    useNativeDriver: true
+  },
+  
+  slideIn: {
+    duration: 300,
+    useNativeDriver: true
+  },
+  
+  scale: {
+    duration: 200,
+    useNativeDriver: true
+  },
+  
+  spring: {
+    tension: 100,
+    friction: 8,
+    useNativeDriver: true
+  }
 };
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {

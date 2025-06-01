@@ -8,6 +8,8 @@ import { CustomTheme } from '../../theme';
 
 const { width, height } = Dimensions.get('window');
 
+const logoImage = require('../../assets/logo.png');
+
 export default function ForgotPasswordScreen() {
   const theme = useTheme() as CustomTheme;
   const { resetPassword, isLoading } = useAuth();
@@ -161,7 +163,7 @@ export default function ForgotPasswordScreen() {
           ]}>
             <Surface style={styles.logoContainer} elevation={5}>
               <Image 
-                source={require('../../assets/logo.png')} 
+                source={logoImage} 
                 style={styles.companyLogo}
                 resizeMode="contain"
               />

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Employee Management System",
-    "slug": "employee-management-system",
+    "name": "CUBS Employee Management System",
+    "slug": "cubs-employee-management",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/appicon.png",
@@ -9,20 +9,20 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#2563EB"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.employeemanagement.app",
+      "bundleIdentifier": "com.cubs.employeemanagement",
       "buildNumber": "1.0.0",
       "infoPlist": {
         "CFBundleURLTypes": [
           {
-            "CFBundleURLName": "employee-management-system",
-            "CFBundleURLSchemes": ["employeemgmt"]
+            "CFBundleURLName": "cubs-employee-management",
+            "CFBundleURLSchemes": ["cubsems"]
           }
         ]
       },
@@ -31,24 +31,56 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#2563EB"
       },
-      "package": "com.employeemanagement.app",
+      "package": "com.cubs.employeemanagement",
       "versionCode": 1,
       "permissions": [
         "android.permission.INTERNET",
-        "android.permission.ACCESS_NETWORK_STATE"
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA"
       ],
       "icon": "./assets/appicon.png"
     },
     "web": {
       "favicon": "./assets/appicon.png",
-      "bundler": "metro"
+      "bundler": "metro",
+      "output": "single",
+      "lang": "en",
+      "name": "CUBS Employee Management System",
+      "shortName": "CUBS EMS",
+      "description": "Professional employee management system for CUBS Technical Contracting",
+      "themeColor": "#2563EB",
+      "backgroundColor": "#ffffff",
+      "display": "standalone",
+      "orientation": "any",
+      "scope": "/",
+      "startUrl": "/",
+      "crossorigin": "use-credentials",
+      "meta": {
+        "apple-mobile-web-app-capable": "yes",
+        "apple-mobile-web-app-status-bar-style": "default",
+        "apple-mobile-web-app-title": "CUBS EMS",
+        "mobile-web-app-capable": "yes",
+        "viewport": "width=device-width, initial-scale=1, shrink-to-fit=no"
+      },
+      "build": {
+        "autoPublish": false
+      }
     },
     "plugins": [
       "expo-router"
     ],
-    "scheme": "employeemgmt",
-    "privacy": "unlisted"
+    "scheme": "cubsems",
+    "privacy": "public",
+    "extra": {
+      "router": {
+        "origin": false
+      }
+    },
+    "experiments": {
+      "typedRoutes": false,
+      "tsconfigPaths": true
+    }
   }
 }

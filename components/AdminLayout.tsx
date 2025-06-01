@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, ScrollView, BackHandler, Animated } from 'react-native';
+import { View, StyleSheet, Dimensions, ScrollView, BackHandler, Animated, Platform } from 'react-native';
 import {
   Appbar,
   Drawer,
@@ -75,14 +75,14 @@ export default function AdminLayout({
     Animated.parallel([
       Animated.spring(sidebarAnimation, {
         toValue: targetValue,
-        useNativeDriver: true,
+        useNativeDriver: false,
         tension: 100,
         friction: 8,
       }),
       Animated.timing(overlayAnimation, {
         toValue: sidebarVisible && isMobile ? 1 : 0,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
   }, [sidebarVisible, isMobile]);
@@ -607,15 +607,25 @@ const styles = StyleSheet.create({
   logoContainer: {
     width: 64,
     height: 64,
+    backgroundColor: 'white',
     borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
+      }
+    })
   },
   logoWrapper: {
     flexDirection: 'column',

@@ -123,15 +123,16 @@ export default function SettingsScreen() {
 
   const calculateStorageInfo = async () => {
     try {
-      // Simulate storage calculation
-      const mockStorage = {
-        used: '2.3 MB',
-        available: '1.2 GB',
-        cached: '450 KB',
-        documents: '1.8 MB',
-        images: '500 KB',
+      // Note: Storage tracking not yet implemented in production
+      // This would normally calculate actual app storage usage
+      const storageInfo = {
+        used: 'Coming Soon',
+        available: 'Coming Soon',
+        cached: 'Coming Soon',
+        documents: 'Coming Soon',
+        images: 'Coming Soon',
       };
-      setStorageInfo(mockStorage);
+      setStorageInfo(storageInfo);
     } catch (error) {
       console.error('Error calculating storage:', error);
     }

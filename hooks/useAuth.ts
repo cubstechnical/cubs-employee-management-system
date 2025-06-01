@@ -7,9 +7,45 @@ export interface User {
   email: string;
   name: string;
   role: 'admin' | 'employee' | 'public';
-  avatar_url?: string | null;
   created_at: string;
 }
+
+// Demo users for testing
+const DEMO_USERS = [
+  {
+    email: 'admin@cubs.com',
+    password: 'admin123',
+    user: {
+      id: 'demo-admin-001',
+      email: 'admin@cubs.com',
+      name: 'Admin User',
+      role: 'admin' as const,
+      created_at: new Date().toISOString(),
+    }
+  },
+  {
+    email: 'manager@cubs.com',
+    password: 'manager123',
+    user: {
+      id: 'demo-manager-001',
+      email: 'manager@cubs.com',
+      name: 'Manager User',
+      role: 'admin' as const,
+      created_at: new Date().toISOString(),
+    }
+  },
+  {
+    email: 'employee@cubs.com',
+    password: 'employee123',
+    user: {
+      id: 'demo-employee-001',
+      email: 'employee@cubs.com',
+      name: 'Employee User',
+      role: 'employee' as const,
+      created_at: new Date().toISOString(),
+    }
+  }
+];
 
 interface AuthState {
   user: User | null;
@@ -35,54 +71,12 @@ export const useAuth = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     try {
       set({ isLoading: true, error: null });
-      
+
+      // Check for demo mode first
       if (!isSupabaseConfigured) {
-        // Demo mode - simulate login with predefined users
-        console.log('🎮 [AUTH] Demo mode login for:', email);
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate network delay
+        console.log('🎭 [AUTH] Demo mode detected, checking demo users...');
         
-        // Define demo users
-        const demoUsers = [
-          {
-            email: 'admin@cubs.com',
-            password: 'admin123',
-            user: {
-              id: 'demo-admin-001',
-              email: 'admin@cubs.com',
-              name: 'Admin User',
-              role: 'admin' as const,
-              avatar_url: null,
-              created_at: new Date().toISOString(),
-            }
-          },
-          {
-            email: 'manager@cubs.com',
-            password: 'manager123',
-            user: {
-              id: 'demo-manager-001',
-              email: 'manager@cubs.com',
-              name: 'Manager User',
-              role: 'admin' as const,
-              avatar_url: null,
-              created_at: new Date().toISOString(),
-            }
-          },
-          {
-            email: 'employee@cubs.com',
-            password: 'employee123',
-            user: {
-              id: 'demo-employee-001',
-              email: 'employee@cubs.com',
-              name: 'Employee User',
-              role: 'employee' as const,
-              avatar_url: null,
-              created_at: new Date().toISOString(),
-            }
-          }
-        ];
-        
-        // Check for valid demo credentials
-        const demoUser = demoUsers.find(u => u.email === email && u.password === password);
+        const demoUser = DEMO_USERS.find(user => user.email === email);
         
         if (demoUser) {
           console.log('✅ [AUTH] Demo login successful:', demoUser.user);
@@ -96,7 +90,6 @@ export const useAuth = create<AuthState>((set, get) => ({
             email: email,
             name: email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1),
             role: 'employee',
-            avatar_url: null,
             created_at: new Date().toISOString(),
           };
           set({ user: dynamicUser, isLoading: false });
@@ -114,29 +107,56 @@ export const useAuth = create<AuthState>((set, get) => ({
       if (error) throw error;
 
       if (data.user) {
-        // Fetch user profile data
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
+        try {
+          // Fetch user profile data using the centralized helper
+          const profile = await fetchUserProfile(data.user.id);
 
-        if (profileError) {
-          console.error('Profile fetch error:', profileError);
-          // Continue with basic user data if profile fetch fails
+          const user: User = {
+            id: data.user.id,
+            email: data.user.email!,
+            name: profile.full_name || data.user.user_metadata?.name || 'User',
+            role: profile.role,
+            created_at: data.user.created_at,
+          };
+
+          console.log('✅ [AUTH] Supabase login successful, profile fetched:', user);
+          set({ user, isLoading: false });
+
+        } catch (profileError: any) {
+          console.error('❌ [AUTH] Profile fetch failed during login:', profileError);
+          
+          // If profile doesn't exist, try to create it automatically
+          if (profileError.message.includes('Profile not found')) {
+            console.log('🔧 [AUTH] Profile not found, attempting to create it...');
+            
+            try {
+              await createMissingProfile(data.user);
+              const profile = await fetchUserProfile(data.user.id);
+
+              const user: User = {
+                id: data.user.id,
+                email: data.user.email!,
+                name: profile.full_name || data.user.user_metadata?.name || 'User',
+                role: profile.role,
+                created_at: data.user.created_at,
+              };
+
+              console.log('✅ [AUTH] Profile created and login successful:', user);
+              set({ user, isLoading: false });
+              return;
+
+            } catch (createError) {
+              console.error('❌ [AUTH] Failed to create missing profile:', createError);
+              const errorMessage = createError instanceof Error ? createError.message : 'Unknown error';
+              throw new Error(`User profile not found and could not be created: ${errorMessage}`);
+            }
+          }
+          
+          // If profile is not found, this is a critical issue.
+          // Do not proceed with a partially formed user object.
+          // Throw an error to be caught by the main try-catch block.
+          throw new Error(`User profile not found or inaccessible: ${profileError.message}`);
         }
-
-        const user: User = {
-          id: data.user.id,
-          email: data.user.email!,
-          name: profile?.full_name || data.user.user_metadata?.name || 'User',
-          role: profile?.role || 'employee',
-          avatar_url: profile?.avatar_url || null,
-          created_at: data.user.created_at,
-        };
-
-        console.log('✅ [AUTH] Supabase login successful:', user);
-        set({ user, isLoading: false });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
@@ -297,41 +317,62 @@ export const useAuth = create<AuthState>((set, get) => ({
       }
       
       console.log('🔍 [AUTH] Fetching session from Supabase...');
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('❌ [AUTH] Session error:', error);
-        set({ user: null, isLoading: false, error: error.message });
+      const { data: authUserResponse, error: authError } = await supabase.auth.getUser();
+
+      if (authError) {
+        console.error('❌ [AUTH] Error getting user from Supabase:', authError);
+        set({ user: null, isLoading: false, error: authError.message });
         return;
       }
       
-      if (session?.user) {
-        console.log('✅ [AUTH] Session found, fetching profile...');
+      const supabaseUser = authUserResponse.user;
+
+      if (supabaseUser) {
+        console.log('✅ [AUTH] Supabase user found via getUser(), fetching profile for ID:', supabaseUser.id);
         try {
-          // Fetch profile from Supabase
-          const profile = await fetchUserProfile(session.user.id);
+          const profile = await fetchUserProfile(supabaseUser.id);
           const user: User = {
             id: profile.id,
             email: profile.email,
-            name: profile.full_name || profile.email.split('@')[0] || 'User',
+            name: profile.full_name || supabaseUser.email?.split('@')[0] || 'User',
             role: profile.role,
-            created_at: session.user.created_at,
+            created_at: supabaseUser.created_at || new Date().toISOString(),
           };
-          console.log('✅ [AUTH] Profile found, user authenticated:', user);
-          
-          // Only update state if we're still loading (prevents race conditions)
-          const latestState = get();
-          if (latestState.isLoading) {
-            set({ user, isLoading: false, error: null });
-          } else {
-            console.log('⚠️ [AUTH] State changed during profile fetch, skipping update');
-          }
+          console.log('✅ [AUTH] Profile found after initial getUser(), user authenticated:', user);
+          set({ user, isLoading: false, error: null });
         } catch (profileError) {
-          console.error('❌ [AUTH] Profile not found during auth check:', profileError);
+          console.warn('⚠️ [AUTH] Initial profile fetch failed after getUser():', profileError);
+          console.log('🔄 [AUTH] Attempting session refresh and retrying profile fetch...');
           
-          // Only update state if we're still loading
-          const latestState = get();
-          if (latestState.isLoading) {
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError) {
+            console.error('❌ [AUTH] Session refresh failed:', refreshError);
+            set({ user: null, isLoading: false, error: 'Session refresh failed' });
+            return;
+          }
+
+          const refreshedSupabaseUser = refreshData.user;
+
+          if (refreshedSupabaseUser) {
+            console.log('✅ [AUTH] Session refreshed, new user object:', refreshedSupabaseUser.id);
+            try {
+              const profile = await fetchUserProfile(refreshedSupabaseUser.id);
+              const user: User = {
+                id: profile.id,
+                email: profile.email,
+                name: profile.full_name || refreshedSupabaseUser.email?.split('@')[0] || 'User',
+                role: profile.role,
+                created_at: refreshedSupabaseUser.created_at || new Date().toISOString(),
+              };
+              console.log('✅ [AUTH] Profile found after session refresh, user authenticated:', user);
+              set({ user, isLoading: false, error: null });
+            } catch (secondProfileError) {
+              console.error('❌ [AUTH] Profile fetch failed even after session refresh:', secondProfileError);
+              set({ user: null, isLoading: false, error: 'Profile fetch failed after refresh' });
+            }
+          } else {
+            console.log('ℹ️ [AUTH] No user after session refresh.');
             set({ user: null, isLoading: false, error: null });
           }
         }
@@ -369,7 +410,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       }
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+        redirectTo: `${window.location.origin}/(auth)/reset-password`,
       });
 
       if (error) {
@@ -425,11 +466,12 @@ async function fetchUserProfile(userId: string) {
       throw new Error('Supabase not configured');
     }
     
-    const { data, error } = await supabase
+    console.log(`[fetchUserProfile] Attempting to fetch profile for userId: ${userId}`);
+    const { data, error, status, statusText } = await supabase
       .from('profiles')
       .select('id, email, full_name, role')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     
     if (error) {
       console.error('Supabase profile fetch error:', error);
@@ -437,12 +479,42 @@ async function fetchUserProfile(userId: string) {
     }
     
     if (!data) {
+      console.warn(`[fetchUserProfile] Profile not found for ${userId} (data is null)`);
       throw new Error('Profile not found');
     }
-    
+
     return data;
+
   } catch (error) {
-    console.error('Profile fetch failed:', error);
+    console.error(`Profile fetch failed for userId ${userId}:`, error);
     throw error;
   }
-} 
+}
+
+// Helper function to create missing profile
+async function createMissingProfile(supabaseUser: SupabaseUser) {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase not configured');
+  }
+  
+  console.log(`[createMissingProfile] Creating profile for user: ${supabaseUser.id}`);
+  
+  const { error } = await supabase
+    .from('profiles')
+    .insert({
+      id: supabaseUser.id,
+      email: supabaseUser.email || '',
+      full_name: supabaseUser.user_metadata?.name || supabaseUser.email?.split('@')[0] || 'User',
+      role: 'employee', // Default role
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      approved_by: null,
+    });
+
+  if (error) {
+    console.error('Error creating missing profile:', error);
+    throw error;
+  }
+  
+  console.log(`✅ [createMissingProfile] Profile created successfully for ${supabaseUser.id}`);
+}

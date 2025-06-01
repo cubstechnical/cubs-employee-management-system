@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, ScrollView, Platform } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import {
   Users,
@@ -42,11 +42,20 @@ export default function AdminDashboardScreen() {
     header: {
       padding: 24,
       backgroundColor: safeThemeAccess.colors(theme, 'surface'),
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 5,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 5,
+        },
+        web: {
+          boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+        }
+      })
     },
     headerTitle: {
       color: safeThemeAccess.colors(theme, 'onSurface'),
@@ -70,11 +79,20 @@ export default function AdminDashboardScreen() {
       width: (width - 48 - safeThemeAccess.spacing(theme, 'md')) / 2,
       marginBottom: safeThemeAccess.spacing(theme, 'sm'),
       borderRadius: safeThemeAccess.borderRadius(theme, 'large'),
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-      elevation: 5,
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 5,
+        },
+        web: {
+          boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+        }
+      })
     },
     quickActionContent: {
       alignItems: 'center',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Dimensions, Animated, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Dimensions, Animated, Image, Platform } from 'react-native';
 import { Text, TextInput, Button, Card, useTheme, Surface, IconButton, Chip, ActivityIndicator } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { CustomTheme } from '../../theme';
 
 const { width, height } = Dimensions.get('window');
+const logoImage = require('../../assets/logo.png');
 
 export default function LoginScreen() {
   const theme = useTheme() as CustomTheme;
@@ -30,19 +31,22 @@ export default function LoginScreen() {
         useNativeDriver: true,
       }),
       Animated.parallel([
-        Animated.timing(slideAnimation, {
+        Animated.spring(slideAnimation, {
           toValue: 0,
-          duration: 600,
+          tension: 40,
+          friction: 7,
           useNativeDriver: true,
         }),
-        Animated.timing(logoAnimation, {
+        Animated.spring(logoAnimation, {
           toValue: 1,
-          duration: 1000,
+          tension: 30,
+          friction: 5,
           useNativeDriver: true,
         }),
-        Animated.timing(cardAnimation, {
+        Animated.spring(cardAnimation, {
           toValue: 1,
-          duration: 800,
+          tension: 50,
+          friction: 8,
           useNativeDriver: true,
         }),
       ]),
@@ -143,7 +147,7 @@ export default function LoginScreen() {
           ]}>
             <Surface style={styles.logoContainer} elevation={5}>
               <Image 
-                source={require('../../assets/logo.png')} 
+                source={logoImage} 
                 style={styles.companyLogo}
                 resizeMode="contain"
               />
@@ -244,7 +248,7 @@ export default function LoginScreen() {
                     mode="text"
                     onPress={() => router.push('/(auth)/forgot-password')}
                     style={styles.textButton}
-                    labelStyle={styles.textButtonLabel}
+                    labelStyle={[styles.textButtonLabel, { color: theme.colors.primary }]}
                   >
                     Forgot Password?
                   </Button>
@@ -260,8 +264,8 @@ export default function LoginScreen() {
                   <Button
                     mode="outlined"
                     onPress={() => Alert.alert('Google Sign In', 'Google authentication will be implemented')}
-                    style={styles.googleButton}
-                    labelStyle={styles.googleButtonText}
+                    style={[styles.googleButton, { borderColor: theme.colors.primary }]}
+                    labelStyle={[styles.googleButtonText, { color: theme.colors.primary }]}
                     icon="google"
                     contentStyle={styles.googleButtonContent}
                   >
@@ -277,7 +281,7 @@ export default function LoginScreen() {
                       mode="text"
                       onPress={() => router.push('/(auth)/signup')}
                       style={styles.signupButton}
-                      labelStyle={styles.signupButtonLabel}
+                      labelStyle={[styles.signupButtonLabel, { color: theme.colors.primary }]}
                       compact
                     >
                       Sign Up
@@ -378,9 +382,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     marginBottom: 8,
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    ...Platform.select({
+      ios: {
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+      },
+      android: {
+        textShadowColor: 'rgba(0,0,0,0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+      },
+      web: {
+        textShadow: '0px 2px 4px rgba(0,0,0,0.3)',
+      }
+    })
   },
   tagline: {
     color: 'rgba(255,255,255,0.9)',
@@ -392,10 +408,20 @@ const styles = StyleSheet.create({
     padding: 32,
     backgroundColor: 'rgba(255,255,255,0.98)',
     marginHorizontal: width < 768 ? 0 : 40,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: '0px 8px 20px rgba(0,0,0,0.15)',
+      }
+    })
   },
   cardHeader: {
     alignItems: 'center',
@@ -419,15 +445,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   loginButton: {
-    backgroundColor: '#DC143C', // Ferrari Red
+    backgroundColor: '#C53030', // Updated professional red
     borderRadius: 16,
     paddingVertical: 8,
     marginTop: 8,
-    shadowColor: '#DC143C',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
     elevation: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#C53030',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+      web: {
+        boxShadow: '0px 4px 8px rgba(197,48,48,0.3)',
+      }
+    })
   },
   loginButtonText: {
     color: 'white',
@@ -520,7 +556,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   textButtonLabel: {
-    color: '#DC143C', // Ferrari Red
     fontWeight: '600',
     fontSize: 14,
   },
@@ -540,13 +575,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   googleButton: {
-    borderColor: '#DC143C', // Ferrari Red
     borderWidth: 1.5,
     borderRadius: 12,
     paddingVertical: 6,
   },
   googleButtonText: {
-    color: '#DC143C', // Ferrari Red
     fontWeight: '600',
     fontSize: 14,
   },
@@ -568,7 +601,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   signupButtonLabel: {
-    color: '#DC143C', // Ferrari Red
     fontWeight: 'bold',
     fontSize: 14,
   },

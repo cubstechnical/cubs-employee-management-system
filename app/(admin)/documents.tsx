@@ -99,37 +99,57 @@ export default function AdminDocumentsScreen() {
     setLoading(true);
     setError(null);
     try {
-      // Generate mock documents for demonstration
-      const mockDocuments: Document[] = [];
+      const allDocuments: Document[] = [];
       
       if (employees && employees.length > 0) {
-        for (const employee of employees.slice(0, 10)) { // Limit to first 10 employees for demo
-          const employeeDocs = await listEmployeeDocuments(employee.id);
-          
-          employeeDocs.forEach((doc, index) => {
-            mockDocuments.push({
-              id: `${employee.id}_${index}`,
-              employeeId: employee.id,
-              employeeName: employee.name,
-              fileName: doc.fileName.split('/').pop() || 'Unknown File',
-              documentType: doc.fileName.includes('passport') ? 'passport' : 
-                           doc.fileName.includes('visa') ? 'visa' : 
-                           doc.fileName.includes('contract') ? 'contract' : 'other',
-              uploadDate: new Date(doc.uploadTimestamp),
-              fileSize: doc.contentLength,
-              url: doc.url,
+        // Fetch documents for all employees
+        for (const employee of employees) {
+          try {
+            const employeeDocs = await listEmployeeDocuments(employee.id);
+            
+            employeeDocs.forEach((doc, index) => {
+              allDocuments.push({
+                id: doc.fileName, // Use fileName as ID for now
+                employeeId: employee.id,
+                employeeName: employee.name,
+                fileName: doc.fileName.split('/').pop() || 'Unknown File',
+                documentType: determineDocumentType(doc.fileName),
+                uploadDate: new Date(doc.uploadTimestamp),
+                fileSize: doc.contentLength,
+                url: doc.url,
+              });
             });
-          });
+          } catch (docError) {
+            console.warn(`Error loading documents for employee ${employee.name}:`, docError);
+            // Continue with other employees even if one fails
+          }
         }
       }
       
-      setDocuments(mockDocuments);
+      setDocuments(allDocuments);
     } catch (err) {
       setError('Failed to load documents');
       console.error('Document loading error:', err);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to determine document type from filename
+  const determineDocumentType = (fileName: string): string => {
+    const lowerFileName = fileName.toLowerCase();
+    
+    if (lowerFileName.includes('passport')) return 'passport';
+    if (lowerFileName.includes('visa')) return 'visa';
+    if (lowerFileName.includes('emirates') || lowerFileName.includes('id')) return 'emirates_id';
+    if (lowerFileName.includes('labor') || lowerFileName.includes('labour')) return 'labor_card';
+    if (lowerFileName.includes('contract')) return 'contract';
+    if (lowerFileName.includes('salary') || lowerFileName.includes('certificate')) return 'salary_certificate';
+    if (lowerFileName.includes('bank') || lowerFileName.includes('statement')) return 'bank_statement';
+    if (lowerFileName.includes('medical') || lowerFileName.includes('health')) return 'medical_certificate';
+    if (lowerFileName.includes('certificate') || lowerFileName.includes('cert')) return 'certificate';
+    
+    return 'other';
   };
 
   const handleUpload = async () => {
@@ -622,8 +642,8 @@ export default function AdminDocumentsScreen() {
                     >
                       {type.replace('_', ' ').toUpperCase()}
                     </Chip>
-            ))}
-          </ScrollView>
+                  ))}
+                </ScrollView>
 
                 <TextInput
                   label="Custom File Name (optional)"

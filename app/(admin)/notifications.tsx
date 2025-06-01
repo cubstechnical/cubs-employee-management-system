@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Dimensions, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Dimensions, RefreshControl, Animated } from 'react-native';
 import {
   Text,
   Card,
@@ -19,11 +19,15 @@ import {
   Badge,
   Menu,
   SegmentedButtons,
+  Checkbox
 } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import AdminLayout from '../../components/AdminLayout';
 import { CustomTheme } from '../../theme';
+import { useEmployees } from '../../hooks/useEmployees';
+import { Employee } from '../../services/supabase';
+import { sendVisaExpiryNotification, sendEmailUsingSendGrid } from '../../services/sendgrid';
 
 const { width } = Dimensions.get('window');
 
@@ -39,421 +43,677 @@ interface Notification {
   employee_name?: string;
 }
 
-// Mock notification data - replace with real API
-const MOCK_NOTIFICATIONS: Notification[] = [
-  {
-    id: '1',
-    title: 'Visa Expiring Soon',
-    message: 'Ahmed Ali\'s visa expires in 7 days (30-06-2024)',
+// Generate real notifications from employee data
+const generateNotificationsFromEmployees = (employees: Employee[]): Notification[] => {
+  const notifications: Notification[] = [];
+  const now = new Date();
+
+  employees.forEach(employee => {
+    if (!employee.visa_expiry_date) return;
+
+    const expiryDate = new Date(employee.visa_expiry_date);
+    const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Create visa expiry notifications based on urgency
+    if (daysUntilExpiry <= 30 && daysUntilExpiry > 0) {
+      let priority: 'high' | 'medium' | 'low' = 'low';
+      let title = 'Visa Expiry Notice';
+
+      if (daysUntilExpiry <= 7) {
+        priority = 'high';
+        title = 'URGENT: Visa Expiring Soon';
+      } else if (daysUntilExpiry <= 15) {
+        priority = 'medium';
+        title = 'Important: Visa Expiry Warning';
+      }
+
+      notifications.push({
+        id: `visa-${employee.id}`,
+        title,
+        message: `${employee.name}'s visa expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? '' : 's'} (${expiryDate.toLocaleDateString('en-GB')})`,
     type: 'visa_expiry',
-    priority: 'high',
+        priority,
     read: false,
-    timestamp: '2024-06-23T10:30:00Z',
-    employee_id: 'EMP001',
-    employee_name: 'Ahmed Ali'
-  },
-  {
-    id: '2',
+        timestamp: new Date().toISOString(),
+        employee_id: employee.employee_id,
+        employee_name: employee.name
+      });
+    }
+
+    // Check for missing documents (if employee has no passport number)
+    if (!employee.passport_number || employee.passport_number.trim() === '') {
+      notifications.push({
+        id: `passport-${employee.id}`,
     title: 'Document Missing',
-    message: 'Mohammed Khan\'s passport copy is missing',
+        message: `${employee.name}'s passport information is missing`,
     type: 'document_missing',
     priority: 'medium',
     read: false,
-    timestamp: '2024-06-23T09:15:00Z',
-    employee_id: 'EMP002',
-    employee_name: 'Mohammed Khan'
-  },
-  {
-    id: '3',
-    title: 'System Update',
-    message: 'Employee management system updated to v2.1',
-    type: 'system',
-    priority: 'low',
-    read: true,
-    timestamp: '2024-06-22T16:45:00Z'
-  }
-];
+        timestamp: new Date().toISOString(),
+        employee_id: employee.employee_id,
+        employee_name: employee.name
+      });
+    }
+
+    // Check for missing email (important for notifications)
+    if (!employee.email_id || !employee.email_id.includes('@')) {
+      notifications.push({
+        id: `email-${employee.id}`,
+        title: 'Contact Missing',
+        message: `${employee.name}'s email address is missing or invalid`,
+    type: 'document_missing',
+    priority: 'medium',
+    read: false,
+        timestamp: new Date().toISOString(),
+        employee_id: employee.employee_id,
+        employee_name: employee.name
+      });
+    }
+  });
+
+  // Sort by priority and timestamp
+  return notifications.sort((a, b) => {
+    const priorityOrder = { high: 3, medium: 2, low: 1 };
+    if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    }
+    return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+  });
+};
 
 export default function NotificationsScreen() {
   const theme = useTheme() as CustomTheme;
+  const { employees, error, refreshEmployees } = useEmployees();
   
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
-  const [filteredNotifications, setFilteredNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  // State for notifications
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  
+  // State for visa expiry notifications
+  const [visaExpiryEmployees, setVisaExpiryEmployees] = useState<Employee[]>([]);
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'unread' | 'high' | 'visa_expiry'>('all');
+  const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
   
-  // New notification modal
-  const [showNewNotificationModal, setShowNewNotificationModal] = useState(false);
-  const [newNotification, setNewNotification] = useState({
-    title: '',
-    message: '',
-    type: 'announcement' as Notification['type'],
-    priority: 'medium' as Notification['priority']
-  });
-
-  // Email settings modal
+  // Email composition modal
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const [emailSettings, setEmailSettings] = useState({
-    visaExpiryReminder: true,
-    documentReminder: true,
-    weeklyReport: true,
-    instantAlerts: false
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  
+  // Automatic email settings
+  const [showEmailSettings, setShowEmailSettings] = useState(false);
+  const [autoEmailSettings, setAutoEmailSettings] = useState({
+    enabled: true,
+    daysBeforeExpiry: [30, 15, 7, 1],
+    recipientEmails: ['admin@cubs-technical.com', 'hr@cubs-technical.com'],
+    includeEmployeeEmail: true,
   });
 
-  // Colors
+  // Animation
+  const fadeAnimation = new Animated.Value(0);
+
+  // Enhanced Professional Colors
   const COLORS = {
-    primary: '#DC143C', // Ferrari Red
-    success: '#22C55E',
+    primary: '#2563EB',
+    secondary: '#3B82F6', 
+    success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
-    info: '#3B82F6',
+    info: '#06B6D4',
     purple: '#8B5CF6',
     gray: '#6B7280',
+    cardBg: theme.colors.surface,
+    accent: '#F3F4F6',
   };
 
   useEffect(() => {
-    filterNotifications();
-  }, [notifications, searchQuery, selectedFilter]);
-
-  const filterNotifications = () => {
-    let filtered = notifications;
+    Animated.timing(fadeAnimation, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
     
-    // Search filter
+    loadVisaExpiryData();
+    updateNotifications();
+  }, [employees]);
+
+  useEffect(() => {
+    filterEmployees();
+  }, [visaExpiryEmployees, searchQuery]);
+
+  const updateNotifications = () => {
+    if (!employees) return;
+    const generatedNotifications = generateNotificationsFromEmployees(employees);
+    setNotifications(generatedNotifications);
+  };
+
+  const loadVisaExpiryData = () => {
+    if (!employees) return;
+
+    const now = new Date();
+    const thirtyDaysFromNow = new Date();
+    thirtyDaysFromNow.setDate(now.getDate() + 30);
+
+    const expiringEmployees = employees.filter(emp => {
+      if (!emp.visa_expiry_date) return false;
+      
+      const expiryDate = new Date(emp.visa_expiry_date);
+      return expiryDate <= thirtyDaysFromNow && expiryDate >= now;
+    });
+
+    // Sort by expiry date (most urgent first)
+    expiringEmployees.sort((a, b) => {
+      const dateA = new Date(a.visa_expiry_date!).getTime();
+      const dateB = new Date(b.visa_expiry_date!).getTime();
+      return dateA - dateB;
+    });
+
+    setVisaExpiryEmployees(expiringEmployees);
+  };
+
+  const filterEmployees = () => {
+    let filtered = visaExpiryEmployees;
+    
     if (searchQuery) {
-      filtered = filtered.filter(notification =>
-        notification.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        notification.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        notification.employee_name?.toLowerCase().includes(searchQuery.toLowerCase())
+      filtered = filtered.filter(emp => 
+        emp.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        emp.company_name?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
     
-    // Type/status filter
-    switch (selectedFilter) {
-      case 'unread':
-        filtered = filtered.filter(n => !n.read);
-        break;
-      case 'high':
-        filtered = filtered.filter(n => n.priority === 'high');
-        break;
-      case 'visa_expiry':
-        filtered = filtered.filter(n => n.type === 'visa_expiry');
-        break;
-    }
-    
-    // Sort by timestamp (newest first)
-    filtered.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    
-    setFilteredNotifications(filtered);
+    setFilteredEmployees(filtered);
   };
 
-  const markAsRead = (notificationId: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshEmployees();
+    } catch (error) {
+      console.error('Error refreshing:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const getDaysUntilExpiry = (expiryDate: string): number => {
+    const now = new Date();
+    const expiry = new Date(expiryDate);
+    const diffTime = expiry.getTime() - now.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const getUrgencyLevel = (days: number): 'critical' | 'urgent' | 'warning' => {
+    if (days <= 7) return 'critical';
+    if (days <= 15) return 'urgent';
+    return 'warning';
+  };
+
+  const getUrgencyColor = (days: number): string => {
+    const level = getUrgencyLevel(days);
+    switch (level) {
+      case 'critical': return COLORS.error;
+      case 'urgent': return COLORS.warning;
+      case 'warning': return COLORS.info;
+      default: return COLORS.gray;
+    }
+  };
+
+  const handleSelectEmployee = (employeeId: string) => {
+    setSelectedEmployees(prev => 
+      prev.includes(employeeId)
+        ? prev.filter(id => id !== employeeId)
+        : [...prev, employeeId]
     );
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const handleSelectAll = () => {
+    if (selectedEmployees.length === filteredEmployees.length) {
+      setSelectedEmployees([]);
+    } else {
+      setSelectedEmployees(filteredEmployees.map(emp => emp.id));
+    }
   };
 
-  const deleteNotification = (notificationId: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== notificationId));
+  const handleSendEmails = async () => {
+    if (selectedEmployees.length === 0) {
+      Alert.alert('No Selection', 'Please select at least one employee to send emails to.');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const selectedEmployeeData = filteredEmployees.filter(emp => 
+        selectedEmployees.includes(emp.id)
+      );
+
+      // Prepare email data
+      const emailData = selectedEmployeeData.map(emp => ({
+        employeeName: emp.name,
+        employeeId: emp.employee_id,
+        expiryDate: emp.visa_expiry_date!,
+        daysRemaining: getDaysUntilExpiry(emp.visa_expiry_date!),
+        companyName: emp.company_name || 'CUBS Technical',
+        email: emp.email_id
+      }));
+
+      // Send to admin emails
+      await sendVisaExpiryNotification(
+        autoEmailSettings.recipientEmails,
+        emailData
+      );
+
+      // Send individual emails to employees if enabled
+      if (autoEmailSettings.includeEmployeeEmail) {
+        for (const emp of selectedEmployeeData) {
+          if (emp.email_id) {
+            await sendEmailUsingSendGrid({
+              to: [emp.email_id],
+              subject: `URGENT: Your Visa Expires in ${getDaysUntilExpiry(emp.visa_expiry_date!)} Days`,
+              htmlContent: generateEmployeeEmailHTML(emp),
+              textContent: generateEmployeeEmailText(emp)
+            });
+          }
+        }
+      }
+
+      Alert.alert(
+        'Success', 
+        `Visa expiry notifications sent successfully to ${selectedEmployees.length} employee(s) and admin team.`
+      );
+      setSelectedEmployees([]);
+      
+    } catch (error) {
+      console.error('Error sending emails:', error);
+      Alert.alert('Error', 'Failed to send some emails. Please try again.');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
-  const sendTestNotification = () => {
-    const testNotification: Notification = {
-      id: Date.now().toString(),
-      title: 'Test Notification',
-      message: 'This is a test notification sent at ' + new Date().toLocaleTimeString(),
-      type: 'system',
-      priority: 'low',
-      read: false,
-      timestamp: new Date().toISOString()
-    };
+  const generateEmployeeEmailHTML = (employee: Employee) => {
+    const daysLeft = getDaysUntilExpiry(employee.visa_expiry_date!);
+    const urgencyColor = getUrgencyColor(daysLeft);
     
-    setNotifications(prev => [testNotification, ...prev]);
-    Alert.alert('Success', 'Test notification sent!');
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Visa Expiry Reminder</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: ${urgencyColor}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0;">VISA EXPIRY REMINDER</h1>
+            <p style="margin: 10px 0 0 0;">CUBS Technical Contracting</p>
+          </div>
+          
+          <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #ddd;">
+            <p><strong>Dear ${employee.name},</strong></p>
+            
+            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid ${urgencyColor};">
+              <h3 style="color: ${urgencyColor}; margin-top: 0;">⚠️ Your visa expires in ${daysLeft} days</h3>
+              <p><strong>Expiry Date:</strong> ${new Date(employee.visa_expiry_date!).toLocaleDateString()}</p>
+              <p><strong>Employee ID:</strong> ${employee.employee_id}</p>
+              <p><strong>Company:</strong> ${employee.company_name || 'CUBS Technical'}</p>
+            </div>
+            
+            <h3>Action Required:</h3>
+            <ul>
+              <li>Contact HR immediately to start the renewal process</li>
+              <li>Prepare all required documents</li>
+              <li>Schedule appointment with immigration authorities</li>
+              <li>Inform your manager about the renewal process</li>
+            </ul>
+            
+            <p><strong>Contact Information:</strong><br>
+            HR Department: hr@cubs-technical.com<br>
+            Phone: +971-XXX-XXXX</p>
+            
+            <p>Best regards,<br>
+            CUBS Technical Contracting<br>
+            Human Resources Department</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   };
 
-  const sendVivaExpiryEmails = async () => {
+  const generateEmployeeEmailText = (employee: Employee) => {
+    const daysLeft = getDaysUntilExpiry(employee.visa_expiry_date!);
+    
+    return `
+VISA EXPIRY REMINDER - CUBS Technical Contracting
+
+Dear ${employee.name},
+
+⚠️ Your visa expires in ${daysLeft} days
+
+Expiry Date: ${new Date(employee.visa_expiry_date!).toLocaleDateString()}
+Employee ID: ${employee.employee_id}
+Company: ${employee.company_name || 'CUBS Technical'}
+
+Action Required:
+- Contact HR immediately to start the renewal process
+- Prepare all required documents
+- Schedule appointment with immigration authorities
+- Inform your manager about the renewal process
+
+Contact Information:
+HR Department: hr@cubs-technical.com
+Phone: +971-XXX-XXXX
+
+Best regards,
+CUBS Technical Contracting
+Human Resources Department
+    `.trim();
+  };
+
+  const handleAutoSendEmails = async () => {
     setLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      Alert.alert('Success', 'Visa expiry emails sent to all employees with expiring visas!');
+      // Auto-send emails based on settings
+    const now = new Date();
+      
+      for (const days of autoEmailSettings.daysBeforeExpiry) {
+        const targetDate = new Date();
+        targetDate.setDate(now.getDate() + days);
+        
+        const employeesToNotify = employees?.filter(emp => {
+          if (!emp.visa_expiry_date) return false;
+          const expiryDate = new Date(emp.visa_expiry_date);
+          const diffInDays = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          return diffInDays === days;
+        }) || [];
+
+        if (employeesToNotify.length > 0) {
+          const emailData = employeesToNotify.map(emp => ({
+            employeeName: emp.name,
+            employeeId: emp.employee_id,
+            expiryDate: emp.visa_expiry_date!,
+            daysRemaining: days,
+            companyName: emp.company_name || 'CUBS Technical'
+          }));
+
+          await sendVisaExpiryNotification(autoEmailSettings.recipientEmails, emailData);
+        }
+      }
+
+      Alert.alert('Success', 'Automatic visa expiry notifications processed successfully.');
     } catch (error) {
-      Alert.alert('Error', 'Failed to send emails. Please try again.');
+      console.error('Error in auto-send:', error);
+      Alert.alert('Error', 'Failed to process automatic notifications.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'visa_expiry': return 'passport';
-      case 'document_missing': return 'file-alert';
-      case 'system': return 'cog';
-      case 'announcement': return 'bullhorn';
-      default: return 'bell';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return COLORS.error;
-      case 'medium': return COLORS.warning;
-      case 'low': return COLORS.info;
-      default: return COLORS.gray;
-    }
-  };
-
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  };
-
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <AdminLayout title="Notifications" currentRoute="/admin/notifications">
-      <View style={styles.container}>
-        {/* Header with Gradient */}
+    <AdminLayout title="📧 Notifications Center" currentRoute="/admin/notifications">
+      <Animated.View style={[styles.container, { opacity: fadeAnimation }]}>
+        
+        {/* Enhanced Hero Section */}
+        <Surface style={[styles.heroSection, { backgroundColor: COLORS.primary }]} elevation={4}>
         <LinearGradient
-          colors={[COLORS.primary, '#B91C3C', '#991B1B']}
-          style={styles.header}
-        >
-          <View style={styles.headerContent}>
-            <View style={styles.headerLeft}>
-              <Text variant="headlineSmall" style={styles.headerTitle}>
-                📢 Notifications
+            colors={[COLORS.primary, COLORS.secondary]}
+            style={styles.heroGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <View style={styles.heroContent}>
+              <View style={styles.heroLeft}>
+                <Text variant="headlineLarge" style={styles.heroTitle}>
+                  📧 Notification Center
               </Text>
-              <Text variant="bodyMedium" style={styles.headerSubtitle}>
-                Manage system alerts and communications
+                <Text variant="bodyLarge" style={styles.heroSubtitle}>
+                  Manage employee notifications and communication settings
               </Text>
+                <View style={styles.heroStats}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{filteredEmployees.length}</Text>
+                    <Text style={styles.statLabel}>Pending Alerts</Text>
             </View>
-            <View style={styles.headerRight}>
-              <Surface style={styles.unreadBadge} elevation={2}>
-                <Text style={[styles.unreadCount, { color: COLORS.primary }]}>
-                  {unreadCount} unread
-                </Text>
-              </Surface>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{selectedEmployees.length}</Text>
+                    <Text style={styles.statLabel}>Selected</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.heroActions}>
+                <IconButton
+                  icon="cog"
+                  size={28}
+                  iconColor="white"
+                  style={[styles.heroButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                  onPress={() => setShowEmailSettings(true)}
+                />
+                <IconButton
+                  icon="refresh"
+                  size={28}
+                  iconColor="white"
+                  style={[styles.heroButton, { backgroundColor: 'rgba(255,255,255,0.2)' }]}
+                  onPress={handleRefresh}
+                />
             </View>
           </View>
         </LinearGradient>
+        </Surface>
 
-        {/* Quick Actions */}
-        <Surface style={styles.quickActions} elevation={2}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {/* Enhanced Quick Actions */}
+        <Surface style={styles.quickActionsContainer} elevation={2}>
+          <Text variant="titleMedium" style={[styles.sectionTitle, { color: theme.colors.onSurface }]}>
+            ⚡ Quick Actions
+          </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickActionsScroll}>
             <Button
               mode="contained"
-              onPress={sendVivaExpiryEmails}
+              onPress={handleAutoSendEmails}
               loading={loading}
-              style={[styles.actionButton, { backgroundColor: COLORS.warning }]}
-              labelStyle={{ color: 'white' }}
+              style={[styles.modernActionButton, { backgroundColor: COLORS.warning }]}
+              labelStyle={{ color: 'white', fontWeight: '600' }}
               icon="email-send"
+              contentStyle={styles.buttonContent}
             >
               Send Visa Alerts
             </Button>
             <Button
-              mode="outlined"
-              onPress={markAllAsRead}
-              style={[styles.actionButton, { borderColor: COLORS.primary }]}
-              labelStyle={{ color: COLORS.primary }}
+              mode="contained"
+              onPress={handleSelectAll}
+              style={[styles.modernActionButton, { backgroundColor: COLORS.info }]}
+              labelStyle={{ color: 'white', fontWeight: '600' }}
               icon="check-all"
+              contentStyle={styles.buttonContent}
             >
-              Mark All Read
+              {selectedEmployees.length === filteredEmployees.length ? 'Deselect All' : 'Select All'}
             </Button>
             <Button
-              mode="outlined"
-              onPress={() => setShowEmailModal(true)}
-              style={[styles.actionButton, { borderColor: COLORS.info }]}
-              labelStyle={{ color: COLORS.info }}
+              mode="contained"
+              onPress={() => setShowEmailSettings(true)}
+              style={[styles.modernActionButton, { backgroundColor: COLORS.purple }]}
+              labelStyle={{ color: 'white', fontWeight: '600' }}
               icon="cog"
+              contentStyle={styles.buttonContent}
             >
               Settings
             </Button>
             <Button
               mode="outlined"
-              onPress={sendTestNotification}
-              style={[styles.actionButton, { borderColor: COLORS.gray }]}
-              labelStyle={{ color: COLORS.gray }}
-              icon="test-tube"
+              onPress={() => setShowEmailModal(true)}
+              style={[styles.modernActionButton, { borderColor: COLORS.primary, borderWidth: 2 }]}
+              labelStyle={{ color: COLORS.primary, fontWeight: '600' }}
+              icon="email-edit"
+              contentStyle={styles.buttonContent}
             >
-              Test
+              Compose
             </Button>
           </ScrollView>
         </Surface>
 
-        {/* Search and Filters */}
-        <Surface style={styles.searchContainer} elevation={1}>
+        {/* Enhanced Search Section */}
+        <Surface style={styles.searchSection} elevation={1}>
           <Searchbar
-            placeholder="Search notifications..."
+            placeholder="Search employees by name, ID, or company..."
             onChangeText={setSearchQuery}
             value={searchQuery}
-            style={styles.searchBar}
+            style={styles.modernSearchBar}
             iconColor={COLORS.primary}
+            placeholderTextColor={COLORS.gray}
+            inputStyle={{ color: theme.colors.onSurface }}
           />
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+          <View style={styles.filterChips}>
             <Chip
-              selected={selectedFilter === 'all'}
-              onPress={() => setSelectedFilter('all')}
-              style={[styles.filterChip, { backgroundColor: selectedFilter === 'all' ? COLORS.primary + '20' : 'transparent' }]}
-              textStyle={{ color: selectedFilter === 'all' ? COLORS.primary : theme.colors.onSurface }}
+              icon="account-alert"
+              selected={true}
+              style={[styles.filterChip, { backgroundColor: COLORS.error + '20' }]}
+              textStyle={{ color: COLORS.error, fontWeight: 'bold' }}
             >
-              All ({notifications.length})
+              Visa Expiring ({filteredEmployees.length})
             </Chip>
-            <Chip
-              selected={selectedFilter === 'unread'}
-              onPress={() => setSelectedFilter('unread')}
-              style={[styles.filterChip, { backgroundColor: selectedFilter === 'unread' ? COLORS.error + '20' : 'transparent' }]}
-              textStyle={{ color: selectedFilter === 'unread' ? COLORS.error : theme.colors.onSurface }}
-            >
-              Unread ({unreadCount})
-            </Chip>
-            <Chip
-              selected={selectedFilter === 'high'}
-              onPress={() => setSelectedFilter('high')}
-              style={[styles.filterChip, { backgroundColor: selectedFilter === 'high' ? COLORS.warning + '20' : 'transparent' }]}
-              textStyle={{ color: selectedFilter === 'high' ? COLORS.warning : theme.colors.onSurface }}
-            >
-              High Priority
-            </Chip>
-            <Chip
-              selected={selectedFilter === 'visa_expiry'}
-              onPress={() => setSelectedFilter('visa_expiry')}
-              style={[styles.filterChip, { backgroundColor: selectedFilter === 'visa_expiry' ? COLORS.info + '20' : 'transparent' }]}
-              textStyle={{ color: selectedFilter === 'visa_expiry' ? COLORS.info : theme.colors.onSurface }}
-            >
-              Visa Alerts
-            </Chip>
-          </ScrollView>
+          </View>
         </Surface>
 
-        {/* Notifications List */}
+        {/* Enhanced Notifications List */}
         <ScrollView 
           style={styles.notificationsList}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {}} />}
+          contentContainerStyle={styles.notificationsContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
         >
-          {filteredNotifications.length > 0 ? (
-            filteredNotifications.map((notification) => (
-              <Surface key={notification.id} style={styles.notificationCard} elevation={1}>
-                <View style={[styles.priorityIndicator, { backgroundColor: getPriorityColor(notification.priority) }]} />
-                
-                <View style={styles.notificationContent}>
-                  <View style={styles.notificationHeader}>
-                    <View style={styles.notificationIcon}>
-                      <IconButton
-                        icon={getNotificationIcon(notification.type)}
-                        size={24}
-                        iconColor={getPriorityColor(notification.priority)}
-                        style={{ margin: 0 }}
-                      />
-                    </View>
-                    
-                    <View style={styles.notificationInfo}>
-                      <Text 
-                        variant="titleSmall" 
-                        style={[
-                          styles.notificationTitle, 
-                          { fontWeight: notification.read ? 'normal' : 'bold', color: theme.colors.onSurface }
-                        ]}
-                      >
-                        {notification.title}
+          {filteredEmployees.length > 0 ? (
+            filteredEmployees.map((employee, index) => (
+              <Surface key={employee.id} style={styles.modernNotificationCard} elevation={2}>
+                <LinearGradient
+                  colors={[COLORS.cardBg, COLORS.accent]}
+                  style={styles.cardGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {/* Priority Indicator */}
+                  <View style={[styles.modernPriorityIndicator, { backgroundColor: getUrgencyColor(getDaysUntilExpiry(employee.visa_expiry_date!)) }]} />
+                  
+                  <View style={styles.modernNotificationContent}>
+                    {/* Header with Avatar and Actions */}
+                    <View style={styles.modernNotificationHeader}>
+                      <View style={styles.employeeAvatarContainer}>
+                        <Surface style={[styles.employeeAvatar, { backgroundColor: COLORS.primary + '20' }]} elevation={1}>
+                          <Text style={[styles.avatarText, { color: COLORS.primary }]}>
+                            {employee.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
                       </Text>
-                      <Text variant="bodySmall" style={styles.notificationTime}>
-                        {formatTimestamp(notification.timestamp)}
-                        {notification.employee_name && ` • ${notification.employee_name}`}
+                        </Surface>
+                        <View style={styles.employeeBasicInfo}>
+                          <Text variant="titleMedium" style={[styles.employeeName, { color: theme.colors.onSurface }]}>
+                            {employee.name}
+                          </Text>
+                          <Text variant="bodySmall" style={[styles.employeeId, { color: COLORS.gray }]}>
+                            ID: {employee.employee_id}
                       </Text>
+                        </View>
                     </View>
                     
                     <View style={styles.notificationActions}>
-                      {!notification.read && (
-                        <Badge style={{ backgroundColor: COLORS.primary }} size={8} />
-                      )}
-                      <IconButton
-                        icon="dots-vertical"
-                        size={20}
-                        iconColor={theme.colors.onSurfaceVariant}
-                        onPress={() => {}}
+                        <Surface style={[styles.urgencyBadge, { backgroundColor: getUrgencyColor(getDaysUntilExpiry(employee.visa_expiry_date!)) + '20' }]} elevation={1}>
+                          <Text style={[styles.urgencyText, { color: getUrgencyColor(getDaysUntilExpiry(employee.visa_expiry_date!)) }]}>
+                            {getDaysUntilExpiry(employee.visa_expiry_date!)} days
+                          </Text>
+                        </Surface>
+                        
+                        <Checkbox
+                          status={selectedEmployees.includes(employee.id) ? 'checked' : 'unchecked'}
+                          onPress={() => handleSelectEmployee(employee.id)}
+                          color={COLORS.primary}
                       />
                     </View>
                   </View>
                   
-                  <Text 
-                    variant="bodyMedium" 
-                    style={[styles.notificationMessage, { color: theme.colors.onSurfaceVariant }]}
-                  >
-                    {notification.message}
+                    {/* Employee Details */}
+                    <View style={styles.employeeDetails}>
+                      <View style={styles.detailRow}>
+                        <IconButton icon="domain" size={16} iconColor={COLORS.info} style={styles.detailIcon} />
+                        <Text style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>
+                          {employee.company_name || 'CUBS Technical'}
                   </Text>
-                  
-                  <View style={styles.notificationFooter}>
-                    <Chip
-                      compact
-                      style={[styles.typeChip, { backgroundColor: getPriorityColor(notification.priority) + '20' }]}
-                      textStyle={{ color: getPriorityColor(notification.priority), fontSize: 10 }}
-                    >
-                      {notification.type.replace('_', ' ').toUpperCase()}
-                    </Chip>
-                    
-                    <View style={styles.notificationButtonGroup}>
-                      {!notification.read && (
-                        <Button
-                          mode="text"
-                          onPress={() => markAsRead(notification.id)}
-                          labelStyle={{ fontSize: 12, color: COLORS.primary }}
-                          compact
-                        >
-                          Mark Read
-                        </Button>
-                      )}
-                      {notification.employee_id && (
-                        <Button
-                          mode="text"
-                          onPress={() => router.push(`/(admin)/employees/${notification.employee_id}`)}
-                          labelStyle={{ fontSize: 12, color: COLORS.info }}
-                          compact
-                        >
-                          View Employee
-                        </Button>
+                      </View>
+                      
+                      <View style={styles.detailRow}>
+                        <IconButton icon="calendar-alert" size={16} iconColor={COLORS.error} style={styles.detailIcon} />
+                        <Text style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>
+                          Expires: {new Date(employee.visa_expiry_date!).toLocaleDateString('en-GB')}
+                        </Text>
+                      </View>
+                      
+                      {employee.email_id && (
+                        <View style={styles.detailRow}>
+                          <IconButton icon="email" size={16} iconColor={COLORS.success} style={styles.detailIcon} />
+                          <Text style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>
+                            {employee.email_id}
+                          </Text>
+                        </View>
                       )}
                     </View>
+
+                    {/* Action Buttons */}
+                    <View style={styles.cardActions}>
+                        <Button
+                        mode="outlined"
+                          compact
+                        onPress={() => router.push(`/(admin)/employees/${employee.id}`)}
+                        style={[styles.cardActionButton, { borderColor: COLORS.info }]}
+                        labelStyle={{ color: COLORS.info, fontSize: 12 }}
+                        icon="eye"
+                        >
+                        View
+                        </Button>
+                        <Button
+                        mode="contained"
+                          compact
+                        onPress={() => {
+                          setSelectedEmployees([employee.id]);
+                          handleSendEmails();
+                        }}
+                        style={[styles.cardActionButton, { backgroundColor: COLORS.warning }]}
+                        labelStyle={{ color: 'white', fontSize: 12 }}
+                        icon="email-send"
+                      >
+                        Send Alert
+                        </Button>
+                    </View>
                   </View>
-                </View>
+                </LinearGradient>
               </Surface>
             ))
           ) : (
-            <View style={styles.emptyState}>
-              <IconButton icon="bell-off" size={64} iconColor={theme.colors.onSurfaceVariant} />
-              <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
-                No notifications found
+            <View style={styles.modernEmptyState}>
+              <Surface style={[styles.emptyStateCard, { backgroundColor: COLORS.accent }]} elevation={1}>
+                <IconButton icon="bell-check" size={64} iconColor={COLORS.success} />
+                <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginTop: 16, textAlign: 'center' }}>
+                  🎉 All Clear!
               </Text>
               <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 8 }}>
-                {searchQuery ? 'Try adjusting your search criteria' : 'All notifications have been cleared'}
+                  {searchQuery ? 'No employees match your search criteria' : 'No pending visa notifications at this time'}
               </Text>
+                {!searchQuery && (
+                  <Button 
+                    mode="contained" 
+                    onPress={handleRefresh}
+                    style={[styles.modernButton, { marginTop: 24, backgroundColor: COLORS.primary }]}
+                    labelStyle={{ color: 'white', fontWeight: '600' }}
+                    icon="refresh"
+                  >
+                    Refresh Data
+                  </Button>
+                )}
+              </Surface>
             </View>
           )}
+          
+          {/* Bottom spacing for FAB */}
+          <View style={{ height: 100 }} />
         </ScrollView>
-
-        {/* Floating Action Button */}
-        <FAB
-          icon="plus"
-          style={[styles.fab, { backgroundColor: COLORS.primary }]}
-          onPress={() => setShowNewNotificationModal(true)}
-          label="New Alert"
-        />
 
         {/* Email Settings Modal */}
         <Portal>
@@ -470,14 +730,14 @@ export default function NotificationsScreen() {
               <View style={styles.settingsList}>
                 <View style={styles.settingItem}>
                   <View>
-                    <Text variant="titleMedium">Visa Expiry Reminders</Text>
+                    <Text variant="titleMedium">Automatic Emails</Text>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      Send emails when visas are about to expire
+                      Send emails automatically based on visa expiry
                     </Text>
                   </View>
                   <Switch
-                    value={emailSettings.visaExpiryReminder}
-                    onValueChange={(value) => setEmailSettings({...emailSettings, visaExpiryReminder: value})}
+                    value={autoEmailSettings.enabled}
+                    onValueChange={(value) => setAutoEmailSettings({...autoEmailSettings, enabled: value})}
                     thumbColor={COLORS.primary}
                   />
                 </View>
@@ -486,15 +746,59 @@ export default function NotificationsScreen() {
                 
                 <View style={styles.settingItem}>
                   <View>
-                    <Text variant="titleMedium">Document Reminders</Text>
+                    <Text variant="titleMedium">Days Before Expiry</Text>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      Alert when employee documents are missing
+                      Select days before visa expiry to send notifications
                     </Text>
                   </View>
-                  <Switch
-                    value={emailSettings.documentReminder}
-                    onValueChange={(value) => setEmailSettings({...emailSettings, documentReminder: value})}
-                    thumbColor={COLORS.primary}
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    {[30, 15, 7, 1].map(day => (
+                      <Chip
+                        key={day}
+                        selected={autoEmailSettings.daysBeforeExpiry.includes(day)}
+                        onPress={() => {
+                          const newDays = autoEmailSettings.daysBeforeExpiry.includes(day)
+                            ? autoEmailSettings.daysBeforeExpiry.filter(d => d !== day)
+                            : [...autoEmailSettings.daysBeforeExpiry, day];
+                          setAutoEmailSettings({
+                            ...autoEmailSettings,
+                            daysBeforeExpiry: newDays
+                          });
+                        }}
+                        style={{
+                          backgroundColor: autoEmailSettings.daysBeforeExpiry.includes(day) 
+                            ? COLORS.primary + '20' 
+                            : 'transparent'
+                        }}
+                        textStyle={{
+                          color: autoEmailSettings.daysBeforeExpiry.includes(day) 
+                            ? COLORS.primary 
+                            : theme.colors.onSurface
+                        }}
+                      >
+                        {day} days
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
+                
+                <Divider />
+                
+                <View style={styles.settingItem}>
+                  <View>
+                    <Text variant="titleMedium">Recipient Emails</Text>
+                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                      Enter email addresses to send notifications to
+                    </Text>
+                  </View>
+                  <TextInput
+                    value={autoEmailSettings.recipientEmails.join(', ')}
+                    onChangeText={(value) => setAutoEmailSettings({
+                      ...autoEmailSettings,
+                      recipientEmails: value.split(',').map(email => email.trim())
+                    })}
+                    mode="outlined"
+                    style={styles.textInput}
                   />
                 </View>
                 
@@ -502,30 +806,14 @@ export default function NotificationsScreen() {
                 
                 <View style={styles.settingItem}>
                   <View>
-                    <Text variant="titleMedium">Weekly Reports</Text>
+                    <Text variant="titleMedium">Include Employee Email</Text>
                     <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      Send weekly employee status summaries
+                      Send individual emails to employees
                     </Text>
                   </View>
                   <Switch
-                    value={emailSettings.weeklyReport}
-                    onValueChange={(value) => setEmailSettings({...emailSettings, weeklyReport: value})}
-                    thumbColor={COLORS.primary}
-                  />
-                </View>
-                
-                <Divider />
-                
-                <View style={styles.settingItem}>
-                  <View>
-                    <Text variant="titleMedium">Instant Alerts</Text>
-                    <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                      Send immediate notifications for critical issues
-                    </Text>
-                  </View>
-                  <Switch
-                    value={emailSettings.instantAlerts}
-                    onValueChange={(value) => setEmailSettings({...emailSettings, instantAlerts: value})}
+                    value={autoEmailSettings.includeEmployeeEmail}
+                    onValueChange={(value) => setAutoEmailSettings({...autoEmailSettings, includeEmployeeEmail: value})}
                     thumbColor={COLORS.primary}
                   />
                 </View>
@@ -553,7 +841,19 @@ export default function NotificationsScreen() {
             </Surface>
           </Modal>
         </Portal>
-      </View>
+
+        {/* Send Email Button */}
+        {selectedEmployees.length > 0 && (
+          <FAB
+            icon="email-send"
+            style={[styles.fab, { backgroundColor: COLORS.primary }]}
+            onPress={handleSendEmails}
+            loading={sendingEmail}
+            label={`Send to ${selectedEmployees.length}`}
+            color="white"
+          />
+        )}
+      </Animated.View>
     </AdminLayout>
   );
 }
@@ -561,7 +861,7 @@ export default function NotificationsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#FAFAFA',
   },
   header: {
     paddingVertical: 24,
@@ -619,15 +919,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: '#f8fafc',
   },
-  filterContainer: {
-    flexDirection: 'row',
-  },
-  filterChip: {
-    marginRight: 8,
-  },
   notificationsList: {
     flex: 1,
-    padding: 16,
+    marginTop: 16,
   },
   notificationCard: {
     marginBottom: 12,
@@ -664,10 +958,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
   },
-  notificationActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   notificationMessage: {
     marginBottom: 12,
     lineHeight: 20,
@@ -680,19 +970,11 @@ const styles = StyleSheet.create({
   typeChip: {
     alignSelf: 'flex-start',
   },
-  notificationButtonGroup: {
-    flexDirection: 'row',
-  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 64,
-  },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
   },
   modalContainer: {
     flex: 1,
@@ -705,16 +987,15 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 500,
     padding: 24,
-    borderRadius: 16,
-    backgroundColor: 'white',
+    borderRadius: 20,
   },
   modalTitle: {
-    textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
   settingsList: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   settingItem: {
     flexDirection: 'row',
@@ -724,6 +1005,223 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
+    gap: 12,
+  },
+  textInput: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    borderRadius: 16,
+  },
+  heroSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  heroGradient: {
+    padding: 24,
+    borderRadius: 16,
+  },
+  heroContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  heroLeft: {
+    flex: 1,
+  },
+  heroTitle: {
+    color: 'white',
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  heroSubtitle: {
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 16,
+  },
+  heroStats: {
+    flexDirection: 'row',
+    gap: 24,
+    marginTop: 8,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  statLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  heroButton: {
+    borderRadius: 20,
+  },
+  quickActionsContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+  },
+  sectionTitle: {
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+  quickActionsScroll: {
+    flexDirection: 'row',
+  },
+  modernActionButton: {
+    marginRight: 12,
+    borderRadius: 20,
+  },
+  buttonContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  searchSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+  },
+  modernSearchBar: {
+    borderRadius: 12,
+    elevation: 0,
+    backgroundColor: '#f8fafc',
+    marginBottom: 12,
+  },
+  filterChips: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterChip: {
+    borderRadius: 16,
+  },
+  notificationsContent: {
+    paddingHorizontal: 16,
+  },
+  modernNotificationCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  cardGradient: {
+    borderRadius: 16,
+  },
+  modernPriorityIndicator: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  modernNotificationContent: {
+    padding: 20,
+    paddingLeft: 24,
+  },
+  modernNotificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  employeeAvatarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  employeeAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  employeeBasicInfo: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  employeeName: {
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginBottom: 2,
+  },
+  employeeId: {
+    fontSize: 12,
+    opacity: 0.7,
+  },
+  notificationActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  urgencyBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  urgencyText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  employeeDetails: {
+    marginBottom: 16,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  detailIcon: {
+    margin: 0,
+    marginRight: 4,
+  },
+  detailText: {
+    fontSize: 14,
+    flex: 1,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  cardActionButton: {
+    borderRadius: 20,
+  },
+  modernEmptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
+  },
+  emptyStateCard: {
+    padding: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    maxWidth: 300,
+  },
+  modernButton: {
+    borderRadius: 20,
+    paddingVertical: 8,
   },
 }); 
 

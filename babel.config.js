@@ -5,14 +5,6 @@ module.exports = function (api) {
     plugins: [
       // Removed deprecated 'expo-router/babel'
       'react-native-reanimated/plugin', // MUST remain last
-      ["module:react-native-dotenv", {
-        "moduleName": "@env",
-        "path": ".env",
-        "blacklist": null,
-        "whitelist": null,
-        "safe": false,
-        "allowUndefined": true
-      }]
     ],
   };
 };

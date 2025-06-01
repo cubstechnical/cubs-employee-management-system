@@ -8,6 +8,8 @@ import { CustomTheme } from '../../theme';
 
 const { width, height } = Dimensions.get('window');
 
+const logoImage = require('../../assets/logo.png');
+
 export default function SignupScreen() {
   const theme = useTheme() as CustomTheme;
   const { signUp, isLoading } = useAuth();
@@ -112,7 +114,7 @@ export default function SignupScreen() {
           ]}>
             <Surface style={styles.logoContainer} elevation={5}>
               <Image 
-                source={require('../../assets/logo.png')} 
+                source={logoImage} 
                 style={styles.companyLogo}
                 resizeMode="contain"
               />

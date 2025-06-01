@@ -223,8 +223,8 @@ const shadows = {
 
 // Modern CUBS Brand Colors
 const CUBS_BRAND_COLORS = {
-  // Primary CUBS Red - Ferrari Red
-  primary: '#DC143C', // Ferrari Red - bright and vibrant
+  // Primary CUBS Red - More subtle professional red
+  primary: '#C53030', // Subtle professional red instead of Ferrari Red
   primaryVariant: '#B91C3C',
   primaryLight: '#F87171',
   primaryDark: '#991B1B',
@@ -261,7 +261,7 @@ const CUBS_BRAND_COLORS = {
   // Status Colors
   success: '#38A169',
   warning: '#D69E2E',
-  error: '#DC143C', // Ferrari Red for errors too
+  error: '#C53030', // Subtle professional red for errors too
   info: '#3182CE',
   
   // Special Colors
@@ -347,10 +347,10 @@ export const lightTheme: CustomTheme = {
     
     // Brand colors
     brand: {
-      primary: '#DC143C', // Ferrari Red
+      primary: '#C53030', // Subtle professional red
       secondary: CUBS_BRAND_COLORS.secondary,
       accent: CUBS_BRAND_COLORS.accent,
-      crimson: '#DC143C', // Ferrari Red
+      crimson: '#C53030', // Subtle professional red
       softPink: CUBS_BRAND_COLORS.primaryLight,
     },
     
@@ -407,97 +407,82 @@ export const darkTheme: CustomTheme = {
   ...MD3DarkTheme,
   colors: {
     ...MD3DarkTheme.colors,
-    // Primary Colors - Bright Ferrari Red for dark mode
-    primary: '#FF4757', // Brighter Ferrari Red for dark mode
+    primary: CUBS_BRAND_COLORS.primary, // Use subtle red from constants
     onPrimary: '#FFFFFF',
-    primaryContainer: '#2C1A1D', // Dark red container
-    onPrimaryContainer: '#FFB3BA', // Light red text
+    primaryContainer: CUBS_BRAND_COLORS.primaryDark, // Adjusted for consistency
+    onPrimaryContainer: '#FFFFFF',
+
+    secondary: CUBS_BRAND_COLORS.secondaryLight, // Lighter blue for dark mode
+    onSecondary: CUBS_BRAND_COLORS.neutral900,
+    secondaryContainer: CUBS_BRAND_COLORS.secondaryDark,
+    onSecondaryContainer: CUBS_BRAND_COLORS.neutral100,
+
+    tertiary: CUBS_BRAND_COLORS.tertiaryLight, // Lighter green
+    onTertiary: CUBS_BRAND_COLORS.neutral900,
+    tertiaryContainer: CUBS_BRAND_COLORS.tertiaryDark,
+    onTertiaryContainer: CUBS_BRAND_COLORS.neutral100,
+
+    error: '#CF6679', // Standard dark theme error, or CUBS_BRAND_COLORS.accent if preferred
+    onError: '#000000',
+    errorContainer: '#B00020', // Darker error container
+    onErrorContainer: '#FFFFFF',
+
+    background: CUBS_BRAND_COLORS.neutral900, // Dark background
+    onBackground: CUBS_BRAND_COLORS.neutral100,
+    surface: CUBS_BRAND_COLORS.neutral800, // Slightly lighter dark surface
+    onSurface: CUBS_BRAND_COLORS.neutral100,
+    surfaceVariant: CUBS_BRAND_COLORS.neutral700,
+    onSurfaceVariant: CUBS_BRAND_COLORS.neutral300,
+    surfaceDisabled: CUBS_BRAND_COLORS.neutral700,
+    onSurfaceDisabled: CUBS_BRAND_COLORS.neutral500,
+
+    outline: CUBS_BRAND_COLORS.neutral600,
+    outlineVariant: CUBS_BRAND_COLORS.neutral700,
     
-    // Secondary Colors - Professional Blue
-    secondary: '#70A5F0', // Lighter blue for dark mode
-    onSecondary: '#001F33',
-    secondaryContainer: '#1A2E42',
-    onSecondaryContainer: '#B3D1FF',
-    
-    // Tertiary Colors - Success Green
-    tertiary: '#6BCF7F', // Lighter green for dark mode
-    onTertiary: '#003319',
-    tertiaryContainer: '#1B3325',
-    onTertiaryContainer: '#B3E5C7',
-    
-    // Background Colors - Modern Dark
-    background: '#0F0F23', // Deep dark blue
-    onBackground: '#E8E8F0', // Light gray text
-    
-    // Surface Colors - Layered Dark
-    surface: '#1A1A2E', // Dark blue surface
-    onSurface: '#EAEAEA', // Light text
-    surfaceVariant: '#2D2D44', // Darker surface variant
-    onSurfaceVariant: '#C0C0C8', // Medium light text
-    surfaceDisabled: '#404040',
-    onSurfaceDisabled: '#808080',
-    
-    // Outline Colors
-    outline: '#666680', // Subtle outline
-    outlineVariant: '#404055', // Darker outline
-    
-    // Error Colors - Ferrari Red
-    error: '#FF6B7D', // Bright red for errors
-    onError: '#FFFFFF',
-    errorContainer: '#5D1A1D',
-    onErrorContainer: '#FFB3BA',
-    
-    // Additional Custom Colors
-    warning: '#FFB347', // Warm orange for warnings
-    onWarning: '#2D1B00',
-    warningContainer: '#4A3200',
-    onWarningContainer: '#FFD09B',
-    
-    success: '#6BCF7F', // Bright green for success
-    onSuccess: '#003319',
-    successContainer: '#1B3325',
-    onSuccessContainer: '#B3E5C7',
-    
-    info: '#70A5F0', // Bright blue for info
-    onInfo: '#001F33',
-    infoContainer: '#1A2E42',
-    onInfoContainer: '#B3D1FF',
-    
-    // Shadow and Elevation
+    warning: CUBS_BRAND_COLORS.accentLight, // Lighter orange for warning
+    onWarning: CUBS_BRAND_COLORS.neutral900,
+    warningContainer: CUBS_BRAND_COLORS.accentDark,
+    onWarningContainer: CUBS_BRAND_COLORS.neutral100,
+
+    success: CUBS_BRAND_COLORS.tertiaryLight, // Lighter green for success
+    onSuccess: CUBS_BRAND_COLORS.neutral900,
+    successContainer: CUBS_BRAND_COLORS.tertiaryDark,
+    onSuccessContainer: CUBS_BRAND_COLORS.neutral100,
+
+    info: CUBS_BRAND_COLORS.secondaryLight, // Lighter blue for info
+    onInfo: CUBS_BRAND_COLORS.neutral900,
+    infoContainer: CUBS_BRAND_COLORS.secondaryDark,
+    onInfoContainer: CUBS_BRAND_COLORS.neutral100,
+
     shadow: 'rgba(0, 0, 0, 0.5)',
     scrim: 'rgba(0, 0, 0, 0.7)',
+
+    inverseSurface: CUBS_BRAND_COLORS.neutral100,
+    onInverseSurface: CUBS_BRAND_COLORS.neutral900,
+    inversePrimary: CUBS_BRAND_COLORS.primaryLight,
     
-    // Inverse Colors
-    inverseSurface: '#E6E6E6',
-    onInverseSurface: '#2D2D2D',
-    inversePrimary: '#DC143C',
+    body: CUBS_BRAND_COLORS.neutral300,
+    text: CUBS_BRAND_COLORS.neutral100,
     
-    // Additional required properties
-    body: '#C0C0C8', // Light gray for body text
-    text: '#EAEAEA', // Very light text
-    
-    // Brand colors - Dark mode optimized
     brand: {
-      primary: '#FF4757', // Bright Ferrari Red for dark mode
-      secondary: '#70A5F0',
-      accent: '#FFB347',
-      crimson: '#FF4757', // Bright Ferrari Red for dark mode
-      softPink: '#FFB3BA',
+      primary: CUBS_BRAND_COLORS.primary, // Use subtle red from constants
+      secondary: CUBS_BRAND_COLORS.secondaryLight,
+      accent: CUBS_BRAND_COLORS.accentLight,
+      crimson: CUBS_BRAND_COLORS.primary, // Use subtle red from constants
+      softPink: CUBS_BRAND_COLORS.primaryLight,
     },
     
-    // Status colors - Enhanced for dark mode
     status: {
-      active: '#6BCF7F', // Bright green
-      inactive: '#808090', // Neutral gray
-      pending: '#FFB347', // Warm orange
-      expired: '#FF6B7D', // Bright red
-      expiring: '#FFB347', // Warm orange
+      active: CUBS_BRAND_COLORS.tertiaryLight,
+      inactive: CUBS_BRAND_COLORS.neutral600,
+      pending: CUBS_BRAND_COLORS.accentLight,
+      expired: CUBS_BRAND_COLORS.primaryLight, // Lighter, but still red-based
+      expiring: CUBS_BRAND_COLORS.accentLight,
     },
     
-    // Gradient colors
     gradient: {
-      start: '#FF4757',
-      end: '#FFB3BA',
+      start: CUBS_BRAND_COLORS.primary,
+      end: CUBS_BRAND_COLORS.primaryLight,
     },
   },
   spacing: defaultSpacing,

@@ -5,6 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 
+const iconImage = require('../../assets/icon.png');
+
 export default function PendingApprovalScreen() {
   const theme = useTheme(); // Use basic Paper theme only
   const { user, logout } = useAuth();
@@ -29,7 +31,7 @@ export default function PendingApprovalScreen() {
       <View style={styles.content}>
         <View style={styles.header}>
           <Image 
-            source={require('../../assets/icon.png')} 
+            source={iconImage} 
             style={styles.logo}
             resizeMode="contain"
           />

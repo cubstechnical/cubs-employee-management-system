@@ -29,21 +29,22 @@ export function withAuthGuard<P extends object>({ WrappedComponent, allowedRoles
     const { user, isLoading } = useAuth();
 
     useEffect(() => {
-      if (!isLoading && !user) {
-        router.replace('/(auth)/login');
+      if (!isLoading) {
+        if (!user) {
+          console.log('[AuthGuard] No user, redirecting to login.');
+          router.replace('/(auth)/login');
+        } else if (allowedRoles && !allowedRoles.includes(user.role)) {
+          console.log(`[AuthGuard] User role '${user.role}' not in allowed roles, redirecting to login.`);
+          router.replace('/(auth)/login');
+        }
       }
-    }, [user, isLoading]);
+    }, [user, isLoading, allowedRoles]);
 
     if (isLoading) {
       return <LoadingScreen />;
     }
 
-    if (!user) {
-      return null;
-    }
-
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
-      router.replace('/(auth)/login');
+    if (!user || (allowedRoles && !allowedRoles.includes(user.role))) {
       return null;
     }
 
