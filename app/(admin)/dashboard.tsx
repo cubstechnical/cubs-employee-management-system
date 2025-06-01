@@ -34,8 +34,8 @@ interface TradeSummary {
 interface Employee {
   id: string;
   name: string;
-  email: string;
-  company?: string;
+  email_id: string;
+  company_name?: string;
   trade?: string;
   department?: string;
   visa_expiry_date?: string;
@@ -159,7 +159,7 @@ function AdminDashboard() {
 
   // State for charts modal
   const [showChartsModal, setShowChartsModal] = useState(false);
-  const [selectedChart, setSelectedChart] = useState<'companies' | 'trades' | 'visa' | 'trends'>('companies');
+  const [selectedChart, setSelectedChart] = useState<'companies' | 'trades' | 'visa'>('companies');
 
   useEffect(() => {
     loadInitialData();
@@ -296,16 +296,16 @@ function AdminDashboard() {
               employeeId: employee.id,
               employeeName: employee.name,
               expiryDate: employee.visa_expiry_date,
-            daysRemaining,
+              daysRemaining,
               urgency: daysRemaining <= 0 ? 'critical' : daysRemaining <= 7 ? 'critical' : daysRemaining <= 15 ? 'warning' : 'notice',
             });
+          }
         }
-      }
-    });
+      });
 
       // Calculate company summary from employee data
       const companyGroups = employees.reduce((acc, emp) => {
-        const company = emp.company || 'Unknown Company';
+        const company = emp.company_name || 'Unknown Company';
         if (!acc[company]) {
           acc[company] = {
             company,
@@ -350,7 +350,7 @@ function AdminDashboard() {
           };
         }
         acc[trade].employee_count++;
-        if (emp.company) acc[trade].companies.add(emp.company);
+        if (emp.company_name) acc[trade].companies.add(emp.company_name);
         if (emp.visa_expiry_date) {
           acc[trade].visa_expiry_dates.push(new Date(emp.visa_expiry_date));
         }
@@ -384,13 +384,13 @@ function AdminDashboard() {
       const urgentRenewals = companySummary.reduce((sum, company) => sum + company.urgent_renewals, 0);
       const expiringVisas = visaAlerts.length;
 
-    setStats({
-      totalEmployees,
-      activeEmployees,
+      setStats({
+        totalEmployees,
+        activeEmployees,
         totalCompanies,
         totalTrades,
         urgentRenewals,
-      expiringVisas,
+        expiringVisas,
         documentsUploaded: totalEmployees * 2, // Estimate 2 docs per employee
         pendingApprovals: Math.floor(totalEmployees * 0.1), // 10% pending approvals
         recentNotifications: expiringVisas,
@@ -402,12 +402,11 @@ function AdminDashboard() {
       console.log('✅ Dashboard data loaded successfully');
       console.log('Total employees:', totalEmployees);
       console.log('Companies found:', totalCompanies);
+      console.log('Company details:', companySummary);
       console.log('Trades found:', totalTrades);
       console.log('Visa alerts:', visaAlerts.length);
     } catch (error) {
       console.error('❌ Error loading dashboard data:', error);
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -750,65 +749,6 @@ function AdminDashboard() {
     );
   };
 
-  const EmployeeTrendsChart = () => {
-    // Generate mock trend data (you can replace with real data)
-    const monthlyData = {
-      labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
-      datasets: [
-        {
-          data: [stats.totalEmployees * 0.85, stats.totalEmployees * 0.88, stats.totalEmployees * 0.92, stats.totalEmployees * 0.95, stats.totalEmployees * 0.98, stats.totalEmployees],
-          color: (opacity = 1) => CHART_COLORS.primary,
-          strokeWidth: 3,
-        }
-      ]
-    };
-
-    return (
-      <Surface style={[styles.chartContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
-        <View style={styles.chartHeader}>
-          <Text variant="titleLarge" style={[styles.chartTitle, { color: CHART_COLORS.primary }]}>
-            📈 Employee Growth Trend
-          </Text>
-          <Text variant="bodySmall" style={[styles.chartSubtitle, { color: CHART_COLORS.gray }]}>
-            6-month employee count progression
-          </Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <LineChart
-            data={monthlyData}
-            width={isMobile ? 350 : 400}
-            height={200}
-            chartConfig={{
-              ...chartConfig,
-              color: (opacity = 1) => CHART_COLORS.primary,
-              strokeWidth: 3,
-              propsForDots: {
-                r: '6',
-                strokeWidth: '2',
-                stroke: CHART_COLORS.primary,
-                fill: CHART_COLORS.primary,
-              }
-            }}
-            bezier
-            style={{
-              marginVertical: 8,
-              borderRadius: 16,
-            }}
-          />
-        </ScrollView>
-        <TouchableOpacity 
-          style={styles.expandButton}
-          onPress={() => {
-            setSelectedChart('trends');
-            setShowChartsModal(true);
-          }}
-        >
-          <Text style={[styles.expandText, { color: CHART_COLORS.primary }]}>View Details →</Text>
-        </TouchableOpacity>
-      </Surface>
-    );
-  };
-
   if (isLoading || employeesLoading) {
     return (
       <View style={[styles.container, styles.centerContent, { backgroundColor: theme.colors.background }]}>
@@ -1075,7 +1015,6 @@ function AdminDashboard() {
         <CompanyDistributionChart />
         <TradeDistributionChart />
         <VisaStatusChart />
-        <EmployeeTrendsChart />
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -1092,20 +1031,19 @@ function AdminDashboard() {
               <Text variant="headlineSmall" style={[styles.modalTitle, { color: CHART_COLORS.primary }]}>
                 📊 Detailed Analytics
               </Text>
-            <IconButton
+              <IconButton
                 icon="close"
                 size={24}
                 onPress={() => setShowChartsModal(false)}
                 iconColor={CHART_COLORS.gray}
               />
-          </View>
+            </View>
             
             <View style={styles.chartTabs}>
               {[
                 { key: 'companies', label: 'Companies', icon: '🏢' },
                 { key: 'trades', label: 'Trades', icon: '🔧' },
-                { key: 'visa', label: 'Visa Status', icon: '🛂' },
-                { key: 'trends', label: 'Trends', icon: '📈' }
+                { key: 'visa', label: 'Visa Status', icon: '🛂' }
               ].map((tab) => (
                 <TouchableOpacity
                   key={tab.key}
@@ -1121,7 +1059,7 @@ function AdminDashboard() {
                     { color: selectedChart === tab.key ? CHART_COLORS.primary : CHART_COLORS.gray }
                   ]}>
                     {tab.label}
-        </Text>
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1131,7 +1069,7 @@ function AdminDashboard() {
                 <View style={styles.detailedChart}>
                   <Text variant="titleLarge" style={styles.chartDetailTitle}>
                     Company Distribution Details
-              </Text>
+                  </Text>
                   {stats.companySummary.map((company, index) => (
                     <Surface key={index} style={styles.companyDetailCard} elevation={2}>
                       <View style={styles.companyDetailRow}>
@@ -1139,25 +1077,25 @@ function AdminDashboard() {
                         <View style={styles.companyDetailInfo}>
                           <Text variant="titleMedium" style={styles.companyDetailName}>
                             {company.company}
-                        </Text>
+                          </Text>
                           <Text variant="bodySmall" style={styles.companyDetailStats}>
                             {company.total_employees} employees • {company.unique_trades} trades • {company.urgent_renewals} urgent renewals
                           </Text>
-            </View>
+                        </View>
                         <Text variant="titleLarge" style={[styles.companyDetailCount, { color: CHART_COLORS.gradients[index % CHART_COLORS.gradients.length] }]}>
                           {company.total_employees}
-                </Text>
-                    </View>
+                        </Text>
+                      </View>
                     </Surface>
                   ))}
-              </View>
+                </View>
               )}
 
               {selectedChart === 'trades' && (
                 <View style={styles.detailedChart}>
                   <Text variant="titleLarge" style={styles.chartDetailTitle}>
                     Trade Distribution Details
-              </Text>
+                  </Text>
                   {stats.tradeSummary.map((trade, index) => (
                     <Surface key={index} style={styles.tradeDetailCard} elevation={2}>
                       <View style={styles.tradeDetailRow}>
@@ -1165,43 +1103,13 @@ function AdminDashboard() {
                         <View style={styles.tradeDetailInfo}>
                           <Text variant="titleMedium" style={styles.tradeDetailName}>
                             {trade.trade}
-                      </Text>
+                          </Text>
                           <Text variant="bodySmall" style={styles.tradeDetailStats}>
                             {trade.employee_count} employees • {trade.companies} companies • Avg {trade.avg_days_to_expiry} days to expiry
-                        </Text>
-                    </View>
+                          </Text>
+                        </View>
                         <Text variant="titleLarge" style={[styles.tradeDetailCount, { color: CHART_COLORS.gradients[index % CHART_COLORS.gradients.length] }]}>
                           {trade.employee_count}
-                    </Text>
-                  </View>
-                    </Surface>
-                ))}
-          </View>
-              )}
-
-              {selectedChart === 'visa' && (
-                <View style={styles.detailedChart}>
-                  <Text variant="titleLarge" style={styles.chartDetailTitle}>
-                    Visa Status Breakdown
-                </Text>
-                  {[
-                    { label: 'Active Visas', count: stats.activeEmployees, color: CHART_COLORS.success, description: 'Employees with valid visa status' },
-                    { label: 'Expiring Soon', count: stats.expiringVisas, color: CHART_COLORS.warning, description: 'Visas expiring within 30 days' },
-                    { label: 'Inactive/Expired', count: stats.totalEmployees - stats.activeEmployees, color: CHART_COLORS.error, description: 'Employees requiring visa renewal' }
-                  ].map((item, index) => (
-                    <Surface key={index} style={styles.visaDetailCard} elevation={2}>
-                      <View style={styles.visaDetailRow}>
-                        <View style={[styles.colorIndicator, { backgroundColor: item.color }]} />
-                        <View style={styles.visaDetailInfo}>
-                          <Text variant="titleMedium" style={styles.visaDetailName}>
-                            {item.label}
-                          </Text>
-                          <Text variant="bodySmall" style={styles.visaDetailDescription}>
-                            {item.description}
-                          </Text>
-              </View>
-                        <Text variant="titleLarge" style={[styles.visaDetailCount, { color: item.color }]}>
-                          {item.count}
                         </Text>
                       </View>
                     </Surface>
@@ -1209,39 +1117,32 @@ function AdminDashboard() {
                 </View>
               )}
 
-              {selectedChart === 'trends' && (
+              {selectedChart === 'visa' && (
                 <View style={styles.detailedChart}>
                   <Text variant="titleLarge" style={styles.chartDetailTitle}>
-                    Employee Growth Trends
-              </Text>
-                  <Surface style={styles.trendDetailCard} elevation={2}>
-                    <Text variant="titleMedium" style={styles.trendDetailTitle}>
-                      6-Month Overview
+                    Visa Status Details
+                  </Text>
+                  {stats.visaAlerts.map((alert, index) => (
+                    <Surface key={index} style={styles.visaDetailCard} elevation={2}>
+                      <View style={styles.visaDetailRow}>
+                        <View style={[styles.colorIndicator, { backgroundColor: getUrgencyColor(alert.urgency) }]} />
+                        <View style={styles.visaDetailInfo}>
+                          <Text variant="titleMedium" style={styles.visaDetailName}>
+                            {alert.employeeName}
+                          </Text>
+                          <Text variant="bodySmall" style={styles.visaDetailDescription}>
+                            Expires: {new Date(alert.expiryDate).toLocaleDateString()} • {alert.daysRemaining} days remaining
+                          </Text>
+                        </View>
+                        <Text variant="titleLarge" style={[styles.visaDetailCount, { color: getUrgencyColor(alert.urgency) }]}>
+                          {alert.daysRemaining}d
                         </Text>
-                    <View style={styles.trendStats}>
-                      <View style={styles.trendStat}>
-                        <Text style={[styles.trendNumber, { color: CHART_COLORS.success }]}>
-                          +{Math.round(stats.totalEmployees * 0.15)}
-                        </Text>
-                        <Text style={styles.trendLabel}>Net Growth</Text>
                       </View>
-                      <View style={styles.trendStat}>
-                        <Text style={[styles.trendNumber, { color: CHART_COLORS.primary }]}>
-                          {Math.round(stats.totalEmployees * 0.15 / 6)}
-                        </Text>
-                        <Text style={styles.trendLabel}>Avg Monthly</Text>
-            </View>
-                      <View style={styles.trendStat}>
-                        <Text style={[styles.trendNumber, { color: CHART_COLORS.info }]}>
-                          {Math.round((stats.totalEmployees * 0.15 / (stats.totalEmployees * 0.85)) * 100)}%
-                        </Text>
-                        <Text style={styles.trendLabel}>Growth Rate</Text>
-                      </View>
-                    </View>
-                  </Surface>
+                    </Surface>
+                  ))}
                 </View>
               )}
-      </ScrollView>
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <Button
@@ -1686,31 +1587,6 @@ const styles = StyleSheet.create({
   visaDetailCount: {
     fontSize: 18,
     fontWeight: 'bold',
-  },
-  trendDetailCard: {
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  trendDetailTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  trendStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  trendStat: {
-    alignItems: 'center',
-  },
-  trendNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  trendLabel: {
-    fontSize: 12,
   },
   modalActions: {
     flexDirection: 'row',

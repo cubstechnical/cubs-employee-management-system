@@ -115,26 +115,6 @@ export default function SecuritySettings({ visible, onDismiss, onSecurityChange 
     }
   };
 
-  const getSecurityScore = () => {
-    let score = 50; // Base score
-    
-    if (isBiometricEnabled) score += 30;
-    if (isBiometricAvailable) score += 10;
-    if (!securityError) score += 10;
-    
-    return Math.min(100, score);
-  };
-
-  const getSecurityLevel = () => {
-    const score = getSecurityScore();
-    if (score >= 90) return { level: 'Excellent', color: theme.colors.primary };
-    if (score >= 70) return { level: 'Good', color: '#4CAF50' };
-    if (score >= 50) return { level: 'Fair', color: '#FF9800' };
-    return { level: 'Needs Improvement', color: theme.colors.error };
-  };
-
-  const securityLevel = getSecurityLevel();
-
   return (
     <Portal>
       <Modal
@@ -158,35 +138,6 @@ export default function SecuritySettings({ visible, onDismiss, onSecurityChange 
           <Divider />
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Security Score */}
-            <Card style={[styles.scoreCard, { backgroundColor: safeThemeAccess.colors(theme, 'surfaceVariant') }]} elevation={2}>
-              <Card.Content>
-                <View style={styles.scoreHeader}>
-                  <View style={styles.scoreInfo}>
-                    <Text variant="titleLarge" style={{ color: safeThemeAccess.colors(theme, 'onSurface') }}>
-                      Security Level
-                    </Text>
-                    <Text variant="headlineMedium" style={{ color: securityLevel.color, fontWeight: 'bold' }}>
-                      {securityLevel.level}
-                    </Text>
-                  </View>
-                  <View style={styles.scoreCircle}>
-                    <Text variant="headlineLarge" style={{ color: securityLevel.color, fontWeight: 'bold' }}>
-                      {getSecurityScore()}
-                    </Text>
-                    <Text variant="bodySmall" style={{ color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }}>
-                      / 100
-                    </Text>
-                  </View>
-                </View>
-                <ProgressBar
-                  progress={getSecurityScore() / 100}
-                  color={securityLevel.color}
-                  style={styles.progressBar}
-                />
-              </Card.Content>
-            </Card>
-
             {/* Security Error */}
             {securityError && (
               <Surface style={[styles.errorCard, { backgroundColor: safeThemeAccess.colors(theme, 'errorContainer') }]} elevation={2}>
@@ -482,27 +433,6 @@ const styles = StyleSheet.create({
   content: {
     maxHeight: 500,
     paddingHorizontal: 20,
-  },
-  scoreCard: {
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  scoreHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  scoreInfo: {
-    flex: 1,
-  },
-  scoreCircle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressBar: {
-    height: 8,
-    borderRadius: 4,
   },
   errorCard: {
     marginBottom: 16,
