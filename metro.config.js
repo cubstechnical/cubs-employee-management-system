@@ -1,6 +1,6 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
-import { getDefaultConfig } from 'expo/metro-config.js';
-import path from 'path';
+const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -74,4 +74,4 @@ config.resolver.extraNodeModules = {
   path: require.resolve('path-browserify'),
 };
 
-export default config;
+module.exports = config;
