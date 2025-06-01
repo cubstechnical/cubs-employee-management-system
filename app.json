@@ -45,7 +45,7 @@
     "web": {
       "favicon": "./assets/appicon.png",
       "bundler": "metro",
-      "output": "single",
+      "output": "static",
       "lang": "en",
       "name": "CUBS Employee Management System",
       "shortName": "CUBS EMS",
@@ -65,7 +65,7 @@
         "viewport": "width=device-width, initial-scale=1, shrink-to-fit=no"
       },
       "build": {
-        "autoPublish": false
+        "autoPublish": true
       }
     },
     "plugins": [
