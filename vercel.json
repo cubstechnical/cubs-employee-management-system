@@ -5,8 +5,9 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "buildCommand": "npm run build:web",
-        "outputDirectory": "dist"
+        "buildCommand": "expo export:web",
+        "outputDirectory": "web-build",
+        "installCommand": "yarn install"
       }
     }
   ],
