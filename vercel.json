@@ -5,7 +5,7 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "buildCommand": "yarn install && NODE_OPTIONS='--experimental-vm-modules' EXPO_USE_METRO=1 expo export",
+        "buildCommand": "yarn install && EXPO_USE_METRO=1 expo export",
         "outputDirectory": "dist",
         "installCommand": "yarn install --frozen-lockfile"
       }
@@ -35,7 +35,6 @@
   ],
   "build": {
     "env": {
-      "NODE_OPTIONS": "--experimental-vm-modules",
       "EXPO_USE_METRO": "1"
     }
   },

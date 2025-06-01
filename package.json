@@ -1,7 +1,6 @@
 {
   "name": "cubs-visa-management",
   "version": "1.0.0",
-  "type": "module",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -12,9 +11,9 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext .ts,.tsx --fix",
     "lint:check": "eslint . --ext .ts,.tsx",
-    "build": "EXPO_USE_METRO=1 NODE_OPTIONS='--experimental-vm-modules' expo export",
-    "build:web": "EXPO_USE_METRO=1 NODE_OPTIONS='--experimental-vm-modules' expo export",
-    "build:production": "EXPO_USE_METRO=1 NODE_OPTIONS='--experimental-vm-modules' expo export --source-maps",
+    "build": "EXPO_USE_METRO=1 expo export",
+    "build:web": "EXPO_USE_METRO=1 expo export",
+    "build:production": "EXPO_USE_METRO=1 expo export --source-maps",
     "serve": "npx serve dist -s -p 3000",
     "prebuild": "expo prebuild",
     "predeploy": "yarn build",
