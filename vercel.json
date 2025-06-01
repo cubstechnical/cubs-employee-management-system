@@ -5,8 +5,8 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "buildCommand": "yarn install && expo export",
-        "outputDirectory": "dist",
+        "buildCommand": "yarn install && expo export:web",
+        "outputDirectory": "web-build",
         "installCommand": "yarn install --frozen-lockfile"
       }
     }
