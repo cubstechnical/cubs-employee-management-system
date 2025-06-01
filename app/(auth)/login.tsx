@@ -389,9 +389,9 @@ const styles = StyleSheet.create({
         textShadowRadius: 4,
       },
       android: {
-        textShadowColor: 'rgba(0,0,0,0.3)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
       },
       web: {
         textShadow: '0px 2px 4px rgba(0,0,0,0.3)',
@@ -410,10 +410,10 @@ const styles = StyleSheet.create({
     marginHorizontal: width < 768 ? 0 : 40,
     ...Platform.select({
       ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
       },
       android: {
         elevation: 8,
@@ -453,12 +453,12 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#C53030',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
       },
       android: {
-        elevation: 6,
+    elevation: 6,
       },
       web: {
         boxShadow: '0px 4px 8px rgba(197,48,48,0.3)',

@@ -416,7 +416,7 @@ export const darkTheme: CustomTheme = {
     onSecondary: CUBS_BRAND_COLORS.neutral900,
     secondaryContainer: CUBS_BRAND_COLORS.secondaryDark,
     onSecondaryContainer: CUBS_BRAND_COLORS.neutral100,
-
+    
     tertiary: CUBS_BRAND_COLORS.tertiaryLight, // Lighter green
     onTertiary: CUBS_BRAND_COLORS.neutral900,
     tertiaryContainer: CUBS_BRAND_COLORS.tertiaryDark,
@@ -443,12 +443,12 @@ export const darkTheme: CustomTheme = {
     onWarning: CUBS_BRAND_COLORS.neutral900,
     warningContainer: CUBS_BRAND_COLORS.accentDark,
     onWarningContainer: CUBS_BRAND_COLORS.neutral100,
-
+    
     success: CUBS_BRAND_COLORS.tertiaryLight, // Lighter green for success
     onSuccess: CUBS_BRAND_COLORS.neutral900,
     successContainer: CUBS_BRAND_COLORS.tertiaryDark,
     onSuccessContainer: CUBS_BRAND_COLORS.neutral100,
-
+    
     info: CUBS_BRAND_COLORS.secondaryLight, // Lighter blue for info
     onInfo: CUBS_BRAND_COLORS.neutral900,
     infoContainer: CUBS_BRAND_COLORS.secondaryDark,
@@ -456,7 +456,7 @@ export const darkTheme: CustomTheme = {
 
     shadow: 'rgba(0, 0, 0, 0.5)',
     scrim: 'rgba(0, 0, 0, 0.7)',
-
+    
     inverseSurface: CUBS_BRAND_COLORS.neutral100,
     onInverseSurface: CUBS_BRAND_COLORS.neutral900,
     inversePrimary: CUBS_BRAND_COLORS.primaryLight,

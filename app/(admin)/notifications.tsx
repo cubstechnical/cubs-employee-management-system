@@ -136,7 +136,7 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
-  
+
   // Email composition modal
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
@@ -202,7 +202,7 @@ export default function NotificationsScreen() {
       const expiryDate = new Date(emp.visa_expiry_date);
       return expiryDate <= thirtyDaysFromNow && expiryDate >= now;
     });
-
+    
     // Sort by expiry date (most urgent first)
     expiringEmployees.sort((a, b) => {
       const dateA = new Date(a.visa_expiry_date!).getTime();
@@ -465,7 +465,7 @@ Human Resources Department
             style={styles.heroGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-          >
+        >
             <View style={styles.heroContent}>
               <View style={styles.heroLeft}>
                 <Text variant="headlineLarge" style={styles.heroTitle}>
@@ -595,7 +595,7 @@ Human Resources Department
                 >
                   {/* Priority Indicator */}
                   <View style={[styles.modernPriorityIndicator, { backgroundColor: getUrgencyColor(getDaysUntilExpiry(employee.visa_expiry_date!)) }]} />
-                  
+                
                   <View style={styles.modernNotificationContent}>
                     {/* Header with Avatar and Actions */}
                     <View style={styles.modernNotificationHeader}>
@@ -638,7 +638,7 @@ Human Resources Department
                           {employee.company_name || 'CUBS Technical'}
                   </Text>
                       </View>
-                      
+                  
                       <View style={styles.detailRow}>
                         <IconButton icon="calendar-alert" size={16} iconColor={COLORS.error} style={styles.detailIcon} />
                         <Text style={[styles.detailText, { color: theme.colors.onSurfaceVariant }]}>

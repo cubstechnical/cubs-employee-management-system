@@ -71,7 +71,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     try {
       set({ isLoading: true, error: null });
-
+      
       // Check for demo mode first
       if (!isSupabaseConfigured) {
         console.log('🎭 [AUTH] Demo mode detected, checking demo users...');
@@ -111,9 +111,9 @@ export const useAuth = create<AuthState>((set, get) => ({
           // Fetch user profile data using the centralized helper
           const profile = await fetchUserProfile(data.user.id);
 
-          const user: User = {
-            id: data.user.id,
-            email: data.user.email!,
+        const user: User = {
+          id: data.user.id,
+          email: data.user.email!,
             name: profile.full_name || data.user.user_metadata?.name || 'User',
             role: profile.role,
             created_at: data.user.created_at,
@@ -138,11 +138,11 @@ export const useAuth = create<AuthState>((set, get) => ({
                 email: data.user.email!,
                 name: profile.full_name || data.user.user_metadata?.name || 'User',
                 role: profile.role,
-                created_at: data.user.created_at,
-              };
+          created_at: data.user.created_at,
+        };
 
               console.log('✅ [AUTH] Profile created and login successful:', user);
-              set({ user, isLoading: false });
+        set({ user, isLoading: false });
               return;
 
             } catch (createError) {
@@ -318,7 +318,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       
       console.log('🔍 [AUTH] Fetching session from Supabase...');
       const { data: authUserResponse, error: authError } = await supabase.auth.getUser();
-
+      
       if (authError) {
         console.error('❌ [AUTH] Error getting user from Supabase:', authError);
         set({ user: null, isLoading: false, error: authError.message });
@@ -339,7 +339,7 @@ export const useAuth = create<AuthState>((set, get) => ({
             created_at: supabaseUser.created_at || new Date().toISOString(),
           };
           console.log('✅ [AUTH] Profile found after initial getUser(), user authenticated:', user);
-          set({ user, isLoading: false, error: null });
+            set({ user, isLoading: false, error: null });
         } catch (profileError) {
           console.warn('⚠️ [AUTH] Initial profile fetch failed after getUser():', profileError);
           console.log('🔄 [AUTH] Attempting session refresh and retrying profile fetch...');
@@ -482,14 +482,14 @@ async function fetchUserProfile(userId: string) {
       console.warn(`[fetchUserProfile] Profile not found for ${userId} (data is null)`);
       throw new Error('Profile not found');
     }
-
+    
     return data;
 
   } catch (error) {
     console.error(`Profile fetch failed for userId ${userId}:`, error);
     throw error;
   }
-}
+} 
 
 // Helper function to create missing profile
 async function createMissingProfile(supabaseUser: SupabaseUser) {
