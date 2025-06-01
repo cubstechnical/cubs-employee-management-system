@@ -18,7 +18,7 @@ config.resolver.alias = {
   'react-native/Libraries/Animated/NativeAnimatedModule': 'react-native-web/dist/cjs/modules/AnimatedModule',
   // Chart Kit web compatibility
   'react-native-svg$': 'react-native-svg/lib/commonjs/ReactNativeSVG.web.js',
-  // Node.js core modules for web compatibility
+  // Node.js core modules for web compatibility - set to false to exclude
   'fs': false,
   'path': 'path-browserify',
   'crypto': 'react-native-crypto',
@@ -33,12 +33,18 @@ config.resolver.alias = {
   'https': false,
   'zlib': false,
   'child_process': false,
-  'os': false,
+  // Exclude SendGrid packages from web build
   '@sendgrid/mail': false,
   '@sendgrid/client': false,
   '@sendgrid/helpers': false,
   '@': __dirname,
 };
+
+// Block list to prevent SendGrid from being included
+config.resolver.blockList = [
+  /.*\/node_modules\/@sendgrid\/.*/,
+  ...((config.resolver.blockList && Array.isArray(config.resolver.blockList)) ? config.resolver.blockList : [])
+];
 
 // Ensure proper platform extensions resolution for web
 config.resolver.platforms = ['web', 'native', 'ios', 'android'];
