@@ -5,7 +5,7 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "buildCommand": "yarn install && EXPO_USE_METRO=1 expo export",
+        "buildCommand": "yarn install && NODE_OPTIONS='--experimental-vm-modules' EXPO_USE_METRO=1 expo export",
         "outputDirectory": "dist",
         "installCommand": "yarn install --frozen-lockfile"
       }
@@ -35,8 +35,26 @@
   ],
   "build": {
     "env": {
-      "NODE_ENV": "production",
+      "NODE_OPTIONS": "--experimental-vm-modules",
       "EXPO_USE_METRO": "1"
     }
+  },
+  "env": {
+    "EXPO_PUBLIC_SUPABASE_URL": "https://your-supabase-url.supabase.co",
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY": "your-supabase-anon-key",
+    "EXPO_PUBLIC_SENDGRID_API_KEY": "your-sendgrid-api-key",
+    "EXPO_PUBLIC_SENDGRID_FROM_EMAIL": "noreply@yourdomain.com",
+    "EXPO_PUBLIC_B2_BUCKET_NAME": "your-bucket-name",
+    "EXPO_PUBLIC_B2_ENDPOINT": "https://s3.us-west-000.backblazeb2.com",
+    "EXPO_PUBLIC_B2_KEY_ID": "your-b2-key-id",
+    "EXPO_PUBLIC_B2_APPLICATION_KEY": "your-b2-application-key",
+    "EXPO_PUBLIC_B2_BUCKET_ID": "your-bucket-id",
+    "EXPO_PUBLIC_ENV": "production",
+    "EXPO_PUBLIC_APP_NAME": "CUBS Employee Management System",
+    "EXPO_PUBLIC_APP_VERSION": "1.0.0",
+    "EXPO_PUBLIC_API_URL": "https://your-deployed-app.vercel.app",
+    "EXPO_PUBLIC_ENABLE_NOTIFICATIONS": "true",
+    "EXPO_PUBLIC_ENABLE_DOCUMENT_UPLOAD": "true",
+    "EXPO_PUBLIC_ENABLE_EMAIL_NOTIFICATIONS": "true"
   }
 } 

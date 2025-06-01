@@ -71,13 +71,4 @@ if (process.env.NODE_ENV === 'production') {
   };
 }
 
-// Add support for web-specific modules
-config.resolver.extraNodeModules = {
-  ...config.resolver.extraNodeModules,
-  fs: require.resolve('expo-file-system'),
-  path: require.resolve('path-browserify'),
-  'react-native-web': require.resolve('react-native-web'),
-  'react-dom': require.resolve('react-dom'),
-};
-
 export default config;
