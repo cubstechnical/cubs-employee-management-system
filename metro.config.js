@@ -1,5 +1,5 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
-import { getDefaultConfig } from 'expo/metro-config';
+import { getDefaultConfig } from 'expo/metro-config.js';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
