@@ -1,6 +1,10 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
-const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
+import { getDefaultConfig } from 'expo/metro-config';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -27,7 +31,7 @@ config.resolver.alias = {
   'buffer': 'buffer',
   'util': 'util',
   'process': 'process/browser',
-  '@': path.resolve(__dirname, './'),
+  '@': __dirname,
 };
 
 // Ensure proper platform extensions resolution for web
@@ -72,6 +76,8 @@ config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
   fs: require.resolve('expo-file-system'),
   path: require.resolve('path-browserify'),
+  'react-native-web': require.resolve('react-native-web'),
+  'react-dom': require.resolve('react-dom'),
 };
 
-module.exports = config;
+export default config;
