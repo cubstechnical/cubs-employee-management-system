@@ -18,14 +18,25 @@ config.resolver.alias = {
   'react-native/Libraries/Animated/NativeAnimatedModule': 'react-native-web/dist/cjs/modules/AnimatedModule',
   // Chart Kit web compatibility
   'react-native-svg$': 'react-native-svg/lib/commonjs/ReactNativeSVG.web.js',
-  // Node.js core modules
-  'fs': 'react-native-fs',
+  // Node.js core modules for web compatibility
+  'fs': false,
   'path': 'path-browserify',
   'crypto': 'react-native-crypto',
   'stream': 'stream-browserify',
   'buffer': 'buffer',
   'util': 'util',
   'process': 'process/browser',
+  'os': false,
+  'net': false,
+  'tls': false,
+  'http': false,
+  'https': false,
+  'zlib': false,
+  'child_process': false,
+  'os': false,
+  '@sendgrid/mail': false,
+  '@sendgrid/client': false,
+  '@sendgrid/helpers': false,
   '@': __dirname,
 };
 

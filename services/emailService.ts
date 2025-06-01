@@ -1,19 +1,33 @@
-import sgMail from '@sendgrid/mail';
 import { Employee } from './supabase';
+
+// Conditional SendGrid import for server environments only
+let sgMail: any = null;
+try {
+  // Only import SendGrid in server/Node.js environments
+  if (typeof window === 'undefined' && typeof process !== 'undefined' && process.versions?.node) {
+    sgMail = require('@sendgrid/mail');
+  }
+} catch (error) {
+  console.log('SendGrid not available in current environment');
+}
 
 // Initialize SendGrid
 const SENDGRID_API_KEY = process.env.EXPO_PUBLIC_SENDGRID_API_KEY || process.env.SENDGRID_API_KEY;
 const FROM_EMAIL = process.env.EXPO_PUBLIC_FROM_EMAIL || 'noreply@cubs.com';
 const COMPANY_NAME = 'CUBS Technical';
 
-// Check if SendGrid is configured
-const isEmailConfigured = !!SENDGRID_API_KEY && SENDGRID_API_KEY !== 'your-sendgrid-api-key';
+// Check if SendGrid is configured and available
+const isEmailConfigured = !!sgMail && !!SENDGRID_API_KEY && SENDGRID_API_KEY !== 'your-sendgrid-api-key';
 
-if (isEmailConfigured) {
-  sgMail.setApiKey(SENDGRID_API_KEY);
-  console.log('✅ SendGrid configured successfully');
+if (isEmailConfigured && sgMail) {
+  try {
+    sgMail.setApiKey(SENDGRID_API_KEY);
+    console.log('✅ SendGrid configured successfully');
+  } catch (error) {
+    console.warn('⚠️ Failed to configure SendGrid:', error);
+  }
 } else {
-  console.warn('⚠️ SendGrid not configured. Email functionality will be disabled.');
+  console.warn('⚠️ SendGrid not available or not configured. Email functionality will be disabled.');
 }
 
 export interface EmailTemplate {
@@ -179,8 +193,8 @@ This is an automated reminder from ${COMPANY_NAME} Employee Management System.
  * Send email using SendGrid
  */
 export async function sendEmail(to: EmailRecipient, template: EmailTemplate): Promise<boolean> {
-  if (!isEmailConfigured) {
-    console.warn('Email not configured, skipping send to:', to.email);
+  if (!isEmailConfigured || !sgMail) {
+    console.warn('Email not configured or SendGrid not available, skipping send to:', to.email);
     return false;
   }
 
