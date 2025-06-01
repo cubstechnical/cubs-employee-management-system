@@ -1,6 +1,7 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
-const { getDefaultConfig } = require('expo/metro-config');
-const path = require('path');
+import { getDefaultConfig } from 'expo/metro-config';
+import { withNativeWind } from 'nativewind/metro';
+import path from 'path';
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -74,4 +75,4 @@ config.resolver.extraNodeModules = {
   path: require.resolve('path-browserify'),
 };
 
-module.exports = config;
+export default withNativeWind(config, { input: './global.css' });
