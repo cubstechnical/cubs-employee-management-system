@@ -1,0 +1,6 @@
+{
+  "imports": {
+    "std/server": "https://deno.land/std@0.190.0/http/server.ts",
+    "npm:backblaze-b2": "npm:backblaze-b2@^1.7.0"
+  }
+} 

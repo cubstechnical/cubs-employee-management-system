@@ -17,18 +17,37 @@ button, .button, [role="button"] {
   -webkit-tap-highlight-color: rgba(220, 20, 60, 0.1);
 }
 
-/* IMPROVED SCROLLING - Fix for database tables */
-.scrollable {
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  overflow: auto;
-}
-
-/* Database table scrolling fixes */
-.table-container {
+/* CRITICAL FIX: Database table scrolling */
+.scrollable,
+[data-class="ScrollView"],
+.table-container,
+.table-scroll-wrapper {
   overflow: auto !important;
   -webkit-overflow-scrolling: touch !important;
-  max-height: 100vh !important;
+  overscroll-behavior: contain !important;
+  scroll-behavior: smooth !important;
+  position: relative !important;
+  /* Hardware acceleration for performance */
+  transform: translateZ(0) !important;
+  will-change: scroll-position !important;
+  contain: layout style paint !important;
+}
+
+/* Specific fixes for React Native ScrollView */
+[data-class="ScrollView"] {
+  display: block !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  height: 100% !important;
+  max-height: none !important;
+}
+
+/* Table container fixes */
+.table-container {
+  overflow: visible !important;
+  height: auto !important;
+  max-height: none !important;
   position: relative !important;
 }
 
@@ -38,12 +57,14 @@ button, .button, [role="button"] {
   -webkit-overflow-scrolling: touch !important;
   width: 100% !important;
   height: 100% !important;
+  max-height: calc(100vh - 200px) !important;
 }
 
-/* React Native ScrollView fixes */
-[data-class="ScrollView"] {
-  overflow: scroll !important;
-  -webkit-overflow-scrolling: touch !important;
+/* Fix for nested scrollable elements */
+.table-container .table-scroll-wrapper {
+  overflow: visible !important;
+  height: auto !important;
+  max-height: none !important;
 }
 
 /* Pull-to-refresh styling */
@@ -121,7 +142,8 @@ button, .button, [role="button"] {
   
   /* Ensure table containers don't restrict scrolling on mobile */
   .table-container,
-  .table-scroll-wrapper {
+  .table-scroll-wrapper,
+  [data-class="ScrollView"] {
     max-height: none !important;
     height: auto !important;
     overflow: visible !important;
@@ -468,15 +490,28 @@ input, select, textarea {
 /* Hardware acceleration for smooth scrolling */
 .table-container,
 .table-scroll-wrapper,
-.scrollable {
-  transform: translateZ(0);
-  will-change: scroll-position;
-  contain: layout style paint;
+.scrollable,
+[data-class="ScrollView"] {
+  transform: translateZ(0) !important;
+  will-change: scroll-position !important;
+  contain: layout style paint !important;
+  backface-visibility: hidden !important;
 }
 
 /* Optimize repaints */
-.table-row {
+.table-row,
+.modernTableRow,
+.modern-table-row {
   contain: layout style paint;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* CRITICAL: Fix for React Native ScrollView in web builds */
+div[data-class="RCTScrollView"] {
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  height: 100% !important;
 }
 
 /* Print styles */

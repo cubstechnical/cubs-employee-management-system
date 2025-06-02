@@ -535,8 +535,15 @@ export default function EmployeesScreen() {
     return formatDateDDMMYYYY(dateString);
   };
 
+  // Navigation helper - FIXED
   const navigateToEmployeeDetails = (employeeId: string) => {
-    router.push(`/(admin)/employees/${employeeId}`);
+    console.log('🔍 Navigating to employee details:', employeeId);
+    try {
+      router.push(`/(admin)/employees/${employeeId}`);
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+      setSnackbar('Failed to navigate to employee details');
+    }
   };
 
   const navigateToDocuments = (employeeId: string) => {
@@ -749,7 +756,7 @@ export default function EmployeesScreen() {
                   </Text>
                 </View>
 
-                {/* Actions - Compact and Functional */}
+                {/* Actions - Compact and Functional - FIXED */}
                 <View style={[styles.tableCell, styles.actionsColumn]}>
                   <View style={styles.modernActionButtons}>
                     <IconButton
@@ -759,8 +766,11 @@ export default function EmployeesScreen() {
                       style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.info + '15' }]}
                       onPress={(e) => {
                         e.stopPropagation();
+                        console.log('👁️ Eye icon clicked for employee:', employee.id);
                         navigateToEmployeeDetails(employee.id);
                       }}
+                      testID={`view-employee-${employee.id}`}
+                      accessibilityLabel={`View details for ${employee.name}`}
                     />
                     <IconButton
                       icon="pencil"
@@ -769,8 +779,11 @@ export default function EmployeesScreen() {
                       style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.warning + '15' }]}
                       onPress={(e) => {
                         e.stopPropagation();
+                        console.log('✏️ Edit icon clicked for employee:', employee.id);
                         handleEditEmployee(employee);
                       }}
+                      testID={`edit-employee-${employee.id}`}
+                      accessibilityLabel={`Edit ${employee.name}`}
                     />
                     <IconButton
                       icon="delete"
@@ -779,8 +792,11 @@ export default function EmployeesScreen() {
                       style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.error + '15' }]}
                       onPress={(e) => {
                         e.stopPropagation();
+                        console.log('🗑️ Delete icon clicked for employee:', employee.id);
                         handleDeleteEmployee(employee.id);
                       }}
+                      testID={`delete-employee-${employee.id}`}
+                      accessibilityLabel={`Delete ${employee.name}`}
                     />
                   </View>
                 </View>

@@ -3,6 +3,8 @@
  * Handles document upload, download, and management
  */
 
+import { supabase } from './supabase';
+
 interface BackblazeConfig {
   bucketName: string;
   endpoint: string;
@@ -296,31 +298,19 @@ export const listEmployeeDocuments = async (employeeId: string): Promise<FileInf
     return mockDocuments;
   }
 
-  const config = getConfig();
-  
   try {
-    // Note: In a real implementation, you would use the B2 list file names API
-    const listUrl = `${config.endpoint}/b2api/v2/b2_list_file_names`;
-    
-    const response = await fetch(listUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': config.applicationKey ? `Bearer ${config.applicationKey}` : '',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        bucketId: config.bucketName,
-        startFileName: `employees/${employeeId}/`,
-        maxFileCount: 100,
+    // Use Supabase Edge Function instead of direct B2 API call to avoid CORS
+    const { data, error } = await supabase.functions.invoke('hyper-task', {
+      body: {
+        action: 'list',
+        employeeId: employeeId,
         prefix: `employees/${employeeId}/`
-      }),
+      }
     });
 
-    if (!response.ok) {
-      throw new Error(`List files failed: ${response.status} ${response.statusText}`);
+    if (error) {
+      throw new Error(`List files failed: ${error.message}`);
     }
-
-    const data = await response.json();
     
     const files: FileInfo[] = (data.files || []).map((file: any) => ({
       fileId: file.fileId,
@@ -328,7 +318,7 @@ export const listEmployeeDocuments = async (employeeId: string): Promise<FileInf
       contentType: file.contentType,
       contentLength: file.contentLength,
       uploadTimestamp: file.uploadTimestamp,
-      url: `${config.endpoint}/file/${config.bucketName}/${file.fileName}`
+      url: file.url
     }));
 
     console.log('☁️ [BACKBLAZE] Listed', files.length, 'documents for employee');

@@ -33,18 +33,8 @@ config.resolver.alias = {
   'https': false,
   'zlib': false,
   'child_process': false,
-  // Exclude SendGrid packages from web build
-  '@sendgrid/mail': false,
-  '@sendgrid/client': false,
-  '@sendgrid/helpers': false,
   '@': __dirname,
 };
-
-// Block list to prevent SendGrid from being included
-config.resolver.blockList = [
-  /.*\/node_modules\/@sendgrid\/.*/,
-  ...((config.resolver.blockList && Array.isArray(config.resolver.blockList)) ? config.resolver.blockList : [])
-];
 
 // Ensure proper platform extensions resolution for web
 config.resolver.platforms = ['web', 'native', 'ios', 'android'];

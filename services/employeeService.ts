@@ -9,7 +9,8 @@ class EmployeeService {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .order('name', { ascending: true });
+        .order('created_at', { ascending: false });
+      
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -25,6 +26,7 @@ class EmployeeService {
         .select('*')
         .eq('id', id)
         .single();
+      
       if (error) throw error;
       return data;
     } catch (error) {
@@ -39,7 +41,8 @@ class EmployeeService {
         .from('employees')
         .select('*')
         .eq('company_id', companyId)
-        .order('name', { ascending: true });
+        .order('name');
+      
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -50,17 +53,22 @@ class EmployeeService {
 
   async createEmployee(employeeData: CreateEmployeeData): Promise<Employee> {
     try {
-      // Calculate visa status based on expiry date
-      const visaStatus = this.calculateVisaStatus(employeeData.visa_expiry_date);
+      // Calculate visa status if visa_expiry_date is provided
+      const visaStatus = employeeData.visa_expiry_date
+        ? this.calculateVisaStatus(employeeData.visa_expiry_date)
+        : 'ACTIVE';
+
       const { data, error } = await supabase
         .from('employees')
         .insert({
           ...employeeData,
           visa_status: visaStatus,
-          status: employeeData.status || 'Active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .select()
         .single();
+
       if (error) throw error;
       return data;
     } catch (error) {
@@ -75,40 +83,47 @@ class EmployeeService {
       const visaStatus = employeeData.visa_expiry_date
         ? this.calculateVisaStatus(employeeData.visa_expiry_date)
         : undefined;
+
+      // Create update payload with proper validation
+      const updatePayload = {
+        ...employeeData,
+        updated_at: new Date().toISOString(),
+        ...(visaStatus && { visa_status: visaStatus }),
+      };
+
+      console.log('🔄 Updating employee with payload:', { id, updatePayload });
+
       const { data, error } = await supabase
         .from('employees')
-        .update({
-          ...employeeData,
-          ...(visaStatus && { visa_status: visaStatus }),
-        })
+        .update(updatePayload)
         .eq('id', id)
         .select()
         .single();
-      if (error) throw error;
+
+      if (error) {
+        console.error('❌ Supabase update error:', error);
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error('Employee not found or update failed');
+      }
+
+      console.log('✅ Employee updated successfully:', data);
       return data;
     } catch (error) {
-      console.error('Error updating employee:', error);
+      console.error('❌ Error updating employee:', error);
       throw error;
     }
   }
 
   async deleteEmployee(id: string): Promise<void> {
     try {
-      // First delete related documents
-      await supabase
-        .from('employee_documents')
-        .delete()
-        .eq('employee_id', id);
-      // Then delete notifications
-      await supabase
-        .from('notifications')
-        .delete()
-        .eq('user_id', id);
-      // Finally delete the employee
       const { error } = await supabase
         .from('employees')
         .delete()
         .eq('id', id);
+
       if (error) throw error;
     } catch (error) {
       console.error('Error deleting employee:', error);
@@ -116,13 +131,14 @@ class EmployeeService {
     }
   }
 
-  async searchEmployees(searchTerm: string): Promise<Employee[]> {
+  async searchEmployees(query: string): Promise<Employee[]> {
     try {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .or(`name.ilike.%${searchTerm}%,employee_id.ilike.%${searchTerm}%,email_id.ilike.%${searchTerm}%,trade.ilike.%${searchTerm}%`)
-        .order('name', { ascending: true });
+        .or(`name.ilike.%${query}%,employee_id.ilike.%${query}%,email_id.ilike.%${query}%`)
+        .order('name');
+      
       if (error) throw error;
       return data || [];
     } catch (error) {
@@ -169,43 +185,57 @@ class EmployeeService {
     }
   }
 
-  private calculateVisaStatus(visaExpiryDate: string | null): string {
-    if (!visaExpiryDate) return 'Active';
-    const expiryDate = new Date(visaExpiryDate);
-    const currentDate = new Date();
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(currentDate.getDate() + 30);
-    if (expiryDate < currentDate) {
-      return 'Expired';
-    } else if (expiryDate <= thirtyDaysFromNow) {
-      return 'Expiring Soon';
-    } else {
-      return 'Active';
-    }
-  }
-
-  // Statistics and analytics
-  async getEmployeeStats() {
+  async getEmployeeStats(): Promise<{
+    total: number;
+    active: number;
+    inactive: number;
+    visaExpiring: number;
+    visaExpired: number;
+  }> {
     try {
-      const [totalResult, activeResult, expiringResult, expiredResult, companiesResult] = await Promise.all([
-        supabase.from('employees').select('id', { count: 'exact', head: true }),
-        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('visa_status', 'Active'),
-        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('visa_status', 'Expiring Soon'),
-        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('visa_status', 'Expired'),
-        supabase.from('employees').select('company_id', { count: 'exact' }),
-      ]);
-
-      return {
-        total: totalResult.count || 0,
-        active: activeResult.count || 0,
-        expiring: expiringResult.count || 0,
-        expired: expiredResult.count || 0,
-        companiesCount: companiesResult.data?.length || 0,
+      const { data, error } = await supabase
+        .from('employees')
+        .select('is_active, visa_expiry_date');
+      
+      if (error) throw error;
+      
+      const now = new Date();
+      const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      
+      const stats = {
+        total: data.length,
+        active: data.filter(emp => emp.is_active).length,
+        inactive: data.filter(emp => !emp.is_active).length,
+        visaExpiring: 0,
+        visaExpired: 0,
       };
+      
+      data.forEach(emp => {
+        if (emp.visa_expiry_date) {
+          const expiryDate = new Date(emp.visa_expiry_date);
+          if (expiryDate < now) {
+            stats.visaExpired++;
+          } else if (expiryDate <= thirtyDaysFromNow) {
+            stats.visaExpiring++;
+          }
+        }
+      });
+      
+      return stats;
     } catch (error) {
       console.error('Error fetching employee stats:', error);
       throw error;
     }
+  }
+
+  private calculateVisaStatus(expiryDate: string): string {
+    const now = new Date();
+    const expiry = new Date(expiryDate);
+    const daysUntilExpiry = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (daysUntilExpiry < 0) return 'EXPIRED';
+    if (daysUntilExpiry <= 30) return 'EXPIRING';
+    return 'ACTIVE';
   }
 }
 

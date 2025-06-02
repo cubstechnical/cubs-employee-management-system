@@ -2,15 +2,167 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>CUBS Technical Visa Management</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CUBS Employee Management System</title>
+    
+    <!-- Enhanced Mobile Viewport -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover, user-scalable=no" />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./public/manifest.json" />
+    
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="CUBS EMS" />
+    <link rel="apple-touch-icon" href="./assets/appicon.png" />
+    <link rel="apple-touch-startup-image" href="./assets/splash.png" />
+    
+    <!-- Android PWA Support -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#DC143C" />
+    <meta name="msapplication-TileColor" content="#DC143C" />
+    <meta name="msapplication-TileImage" content="./assets/appicon.png" />
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="./assets/appicon.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./assets/appicon.png" />
+    
+    <!-- Meta Tags for Mobile -->
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="format-detection" content="date=no" />
+    <meta name="format-detection" content="address=no" />
+    <meta name="format-detection" content="email=no" />
+    
+    <!-- Preload Critical Resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Enhanced Font Loading -->
     <style>
-      @import url("https://fonts.googleapis.com/css?family=Roboto:500,400,600|Inter:500,400");
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&display=swap");
+      
+      /* Critical CSS for better loading */
+      * {
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        -khtml-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+      
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        overflow-x: hidden;
+        background-color: #ffffff;
+      }
+      
+      #root {
+        height: 100vh;
+        overflow-x: hidden;
+      }
+      
+      /* Loading spinner */
+      .loading-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #DC143C 0%, #FF6B6B 100%);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+      }
+      
+      .loading-logo {
+        width: 80px;
+        height: 80px;
+        background: white;
+        border-radius: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+        animation: pulse 2s infinite;
+      }
+      
+      .loading-text {
+        color: white;
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 30px;
+      }
+      
+      .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      /* Hide loading screen when app loads */
+      .app-loaded .loading-container {
+        display: none;
+      }
     </style>
+    
     <link href="tailwind.css" rel="stylesheet" />
+    <link href="styles/mobile-enhancements.css" rel="stylesheet" />
   </head>
   <body>
+    <!-- Loading Screen -->
+    <div class="loading-container">
+      <div class="loading-logo">
+        <span style="font-size: 24px; font-weight: bold; color: #DC143C;">C</span>
+      </div>
+      <div class="loading-text">CUBS Employee Management</div>
+      <div class="loading-spinner"></div>
+    </div>
+    
     <div id="root"></div>
+    
+    <!-- Service Worker Registration -->
+    <script>
+      // Register service worker for PWA functionality
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then((registration) => {
+              console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+              console.log('SW registration failed: ', registrationError);
+            });
+        });
+      }
+      
+      // Hide loading screen when app is ready
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          document.body.classList.add('app-loaded');
+        }, 1000);
+      });
+    </script>
+    
     <script type="module" src="./index.js"></script>
   </body>
 </html>
