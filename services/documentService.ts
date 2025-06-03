@@ -22,6 +22,351 @@ interface B2UploadResponse {
   mimeType: string;
 }
 
+export interface DocumentUploadResult {
+  success: boolean;
+  fileUrl?: string;
+  error?: string;
+  fileSize?: number;
+  fileType?: string;
+}
+
+export interface DocumentValidation {
+  isValid: boolean;
+  errors: string[];
+  fileSize: number;
+  fileType: string;
+  fileName: string;
+}
+
+// ENHANCED: File size and type constraints
+const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB in bytes
+const ALLOWED_FILE_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+];
+
+const ALLOWED_EXTENSIONS = [
+  '.pdf', '.jpg', '.jpeg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx'
+];
+
+// ENHANCED: Format file size for display
+export const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+// ENHANCED: Get file extension
+const getFileExtension = (fileName: string): string => {
+  return fileName.toLowerCase().substring(fileName.lastIndexOf('.'));
+};
+
+// ENHANCED: Validate file before upload
+export const validateFile = (file: File): DocumentValidation => {
+  const errors: string[] = [];
+  const fileSize = file.size;
+  const fileType = file.type;
+  const fileName = file.name;
+  const fileExtension = getFileExtension(fileName);
+
+  // Check file size (2MB limit)
+  if (fileSize > MAX_FILE_SIZE) {
+    errors.push(`File size (${formatFileSize(fileSize)}) exceeds the 2MB limit. Please compress or choose a smaller file.`);
+  }
+
+  // Check file type
+  const isValidType = ALLOWED_FILE_TYPES.includes(fileType) || ALLOWED_EXTENSIONS.includes(fileExtension);
+  if (!isValidType) {
+    errors.push(`File type "${fileType || fileExtension}" is not supported. Allowed formats: PDF, JPG, PNG, DOC, DOCX, XLS, XLSX`);
+  }
+
+  // Check file name
+  if (!fileName || fileName.trim() === '') {
+    errors.push('File name is required');
+  }
+
+  // Check for potentially malicious files
+  const suspiciousExtensions = ['.exe', '.bat', '.cmd', '.com', '.pif', '.scr', '.vbs', '.js'];
+  if (suspiciousExtensions.some(ext => fileName.toLowerCase().endsWith(ext))) {
+    errors.push('This file type is not allowed for security reasons');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    fileSize,
+    fileType,
+    fileName
+  };
+};
+
+// ENHANCED: Generate unique file name
+const generateUniqueFileName = (originalName: string, employeeId: string): string => {
+  const timestamp = Date.now();
+  const randomString = Math.random().toString(36).substring(2, 8);
+  const extension = getFileExtension(originalName);
+  const baseName = originalName.replace(extension, '').replace(/[^a-zA-Z0-9]/g, '_');
+  
+  return `documents/${employeeId}/${timestamp}_${randomString}_${baseName}${extension}`;
+};
+
+// ENHANCED: Upload document with validation and progress
+export const uploadDocument = async (
+  file: File,
+  employeeId: string,
+  documentType: string,
+  onProgress?: (progress: number) => void
+): Promise<DocumentUploadResult> => {
+  try {
+    // Validate file first
+    const validation = validateFile(file);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error: validation.errors.join('; '),
+        fileSize: validation.fileSize,
+        fileType: validation.fileType
+      };
+    }
+
+    // Generate unique file name
+    const fileName = generateUniqueFileName(file.name, employeeId);
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('employee-documents')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type
+      });
+
+    if (error) {
+      console.error('Upload error:', error);
+      
+      // Handle specific error cases
+      if (error.message.includes('Duplicate')) {
+        return {
+          success: false,
+          error: 'A file with this name already exists. Please rename the file and try again.',
+          fileSize: file.size,
+          fileType: file.type
+        };
+      } else if (error.message.includes('size')) {
+        return {
+          success: false,
+          error: 'File size exceeds the allowed limit (2MB). Please compress the file and try again.',
+          fileSize: file.size,
+          fileType: file.type
+        };
+      } else {
+        return {
+          success: false,
+          error: `Upload failed: ${error.message}`,
+          fileSize: file.size,
+          fileType: file.type
+        };
+      }
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('employee-documents')
+      .getPublicUrl(fileName);
+
+    // Save document metadata to database
+    const { error: dbError } = await supabase
+      .from('employee_documents')
+      .insert({
+        employee_id: employeeId,
+        document_type: documentType,
+        file_name: file.name,
+        file_path: fileName,
+        file_url: urlData.publicUrl,
+        file_size: file.size,
+        file_type: file.type,
+        uploaded_at: new Date().toISOString()
+      });
+
+    if (dbError) {
+      console.error('Database error:', dbError);
+      
+      // Clean up uploaded file if database insert fails
+      await supabase.storage
+        .from('employee-documents')
+        .remove([fileName]);
+
+      return {
+        success: false,
+        error: `Failed to save document information: ${dbError.message}`,
+        fileSize: file.size,
+        fileType: file.type
+      };
+    }
+
+    // Simulate progress for better UX
+    onProgress?.(100);
+
+    return {
+      success: true,
+      fileUrl: urlData.publicUrl,
+      fileSize: file.size,
+      fileType: file.type
+    };
+
+  } catch (error) {
+    console.error('Unexpected upload error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown upload error',
+      fileSize: file.size,
+      fileType: file.type
+    };
+  }
+};
+
+// ENHANCED: Get storage usage statistics
+export const getStorageStats = async (): Promise<{
+  totalFiles: number;
+  totalSize: number;
+  usedPercentage: number;
+  freeSpace: number;
+  freeSpaceFormatted: string;
+}> => {
+  try {
+    const { data: files, error } = await supabase
+      .from('employee_documents')
+      .select('file_size');
+
+    if (error) throw error;
+
+    const totalFiles = files?.length || 0;
+    const totalSize = files?.reduce((sum, file) => sum + (file.file_size || 0), 0) || 0;
+    
+    // Free tier limit: 10GB
+    const freeLimit = 10 * 1024 * 1024 * 1024; // 10GB in bytes
+    const usedPercentage = (totalSize / freeLimit) * 100;
+    const freeSpace = freeLimit - totalSize;
+
+    return {
+      totalFiles,
+      totalSize,
+      usedPercentage: Math.min(usedPercentage, 100),
+      freeSpace: Math.max(freeSpace, 0),
+      freeSpaceFormatted: formatFileSize(Math.max(freeSpace, 0))
+    };
+  } catch (error) {
+    console.error('Error getting storage stats:', error);
+    return {
+      totalFiles: 0,
+      totalSize: 0,
+      usedPercentage: 0,
+      freeSpace: 0,
+      freeSpaceFormatted: '0 Bytes'
+    };
+  }
+};
+
+// ENHANCED: Delete document with cleanup
+export const deleteDocument = async (documentId: string): Promise<boolean> => {
+  try {
+    // Get document info first
+    const { data: document, error: fetchError } = await supabase
+      .from('employee_documents')
+      .select('file_path')
+      .eq('id', documentId)
+      .single();
+
+    if (fetchError) {
+      console.error('Error fetching document:', fetchError);
+      return false;
+    }
+
+    // Delete from storage
+    if (document?.file_path) {
+      const { error: storageError } = await supabase.storage
+        .from('employee-documents')
+        .remove([document.file_path]);
+
+      if (storageError) {
+        console.error('Error deleting from storage:', storageError);
+        // Don't return false here, continue to delete DB record
+      }
+    }
+
+    // Delete from database
+    const { error: dbError } = await supabase
+      .from('employee_documents')
+      .delete()
+      .eq('id', documentId);
+
+    if (dbError) {
+      console.error('Error deleting from database:', dbError);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Unexpected error deleting document:', error);
+    return false;
+  }
+};
+
+// ENHANCED: Get employee documents
+export const getEmployeeDocuments = async (employeeId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('employee_documents')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('uploaded_at', { ascending: false });
+
+    if (error) throw error;
+
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching employee documents:', error);
+    return [];
+  }
+};
+
+// ENHANCED: Download document
+export const downloadDocument = async (filePath: string, fileName: string) => {
+  try {
+    const { data, error } = await supabase.storage
+      .from('employee-documents')
+      .download(filePath);
+
+    if (error) throw error;
+
+    // Create download link
+    const url = URL.createObjectURL(data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    return true;
+  } catch (error) {
+    console.error('Error downloading document:', error);
+    return false;
+  }
+};
+
 class DocumentService {
   private readonly B2_API_URL = process.env.EXPO_PUBLIC_B2_API_URL || 'your-b2-api-url';
   private readonly B2_BUCKET_NAME = process.env.EXPO_PUBLIC_B2_BUCKET_NAME || 'your-bucket-name';
@@ -73,42 +418,6 @@ class DocumentService {
     }
   }
 
-  async uploadDocument(params: UploadDocumentParams): Promise<EmployeeDocument> {
-    try {
-      // First, upload file to Backblaze B2
-      const uploadResult = await this.uploadToB2(params.fileUri, params.fileName);
-
-      // Then save document metadata to Supabase
-      const documentData: CreateEmployeeDocumentData = {
-        employee_id: params.employeeId,
-        document_type: params.documentType,
-        file_name: params.fileName,
-        file_url: uploadResult.fileUrl,
-        file_size: uploadResult.fileSize,
-        mime_type: uploadResult.mimeType,
-        uploaded_by: params.uploadedBy,
-        expiry_date: params.expiryDate || null,
-        notes: params.notes || null,
-        document_number: params.documentNumber || '',
-        issuing_authority: params.issuingAuthority || '',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from('employee_documents')
-        .insert(documentData)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error uploading document:', error);
-      throw error;
-    }
-  }
-
   async updateDocument(id: string, documentData: UpdateEmployeeDocumentData): Promise<EmployeeDocument> {
     try {
       const { data, error } = await supabase
@@ -122,44 +431,6 @@ class DocumentService {
       return data;
     } catch (error) {
       console.error('Error updating document:', error);
-      throw error;
-    }
-  }
-
-  async deleteDocument(id: string): Promise<void> {
-    try {
-      // First get the document to get the file URL
-      const document = await this.getDocumentById(id);
-      
-      if (document) {
-        // Delete file from Backblaze B2
-        await this.deleteFromB2(document.file_url);
-      }
-
-      // Then delete document record from Supabase
-      const { error } = await supabase
-        .from('employee_documents')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error deleting document:', error);
-      throw error;
-    }
-  }
-
-  async downloadDocument(document: EmployeeDocument): Promise<string> {
-    try {
-      // Generate a signed URL for secure download
-      const signedUrl = await this.generateSignedDownloadUrl(document.file_url);
-      
-      // Log the download for audit purposes
-      console.log(`Document downloaded: ${document.file_name} by user at ${new Date().toISOString()}`);
-      
-      return signedUrl;
-    } catch (error) {
-      console.error('Error downloading document:', error);
       throw error;
     }
   }

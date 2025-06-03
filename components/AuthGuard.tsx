@@ -30,12 +30,18 @@ export function withAuthGuard<P extends object>({ WrappedComponent, allowedRoles
 
     useEffect(() => {
       if (!isLoading) {
+        console.log(`[AuthGuard] Checking access for component: ${WrappedComponent.name}`);
+        console.log(`[AuthGuard] User:`, user);
+        console.log(`[AuthGuard] Allowed roles:`, allowedRoles);
+        
         if (!user) {
           console.log('[AuthGuard] No user, redirecting to login.');
           router.replace('/(auth)/login');
         } else if (allowedRoles && !allowedRoles.includes(user.role)) {
-          console.log(`[AuthGuard] User role '${user.role}' not in allowed roles, redirecting to login.`);
+          console.log(`[AuthGuard] User role '${user.role}' not in allowed roles [${allowedRoles.join(', ')}], redirecting to login.`);
           router.replace('/(auth)/login');
+        } else {
+          console.log(`[AuthGuard] Access granted for user role '${user.role}'`);
         }
       }
     }, [user, isLoading, allowedRoles]);

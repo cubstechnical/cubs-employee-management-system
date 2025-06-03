@@ -4,25 +4,56 @@ import { TextInput } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 interface WebDatePickerProps {
-  value: Date;
+  value: string | Date;
   mode?: 'date' | 'time' | 'datetime';
   display?: 'default' | 'spinner' | 'compact';
-  onChange: (event: any, selectedDate?: Date) => void;
+  onDateChange: (dateString: string) => void;
   label?: string;
   style?: any;
+  error?: boolean;
 }
 
 export default function WebDatePicker({ 
   value, 
   mode = 'date', 
   display, 
-  onChange, 
+  onDateChange, 
   label,
-  style 
+  style,
+  error
 }: WebDatePickerProps) {
-  if (Platform.OS === 'web') {
-    // Web implementation using HTML5 date input
-    const formatDateForInput = (date: Date) => {
+  
+  // Safe date conversion function
+  const safeToDate = (input: string | Date): Date => {
+    if (!input) return new Date();
+    
+    if (input instanceof Date) {
+      return isNaN(input.getTime()) ? new Date() : input;
+    }
+    
+    if (typeof input === 'string') {
+      // Handle DD-MM-YYYY format
+      if (input.includes('-') && input.length === 10) {
+        const [day, month, year] = input.split('-');
+        if (day && month && year) {
+          const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          return isNaN(date.getTime()) ? new Date() : date;
+        }
+      }
+      
+      // Handle other formats
+      const date = new Date(input);
+      return isNaN(date.getTime()) ? new Date() : date;
+    }
+    
+    return new Date();
+  };
+
+  // Safe date formatting function
+  const formatDateForInput = (input: string | Date) => {
+    try {
+      const date = safeToDate(input);
+      
       if (mode === 'date') {
         return date.toISOString().split('T')[0];
       } else if (mode === 'time') {
@@ -30,22 +61,50 @@ export default function WebDatePicker({
       } else {
         return date.toISOString().substring(0, 16);
       }
-    };
+    } catch (error) {
+      console.warn('Date formatting error:', error);
+      return '';
+    }
+  };
 
+  // Format date to DD-MM-YYYY for output
+  const formatDateDDMMYYYY = (date: Date): string => {
+    try {
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}-${month}-${year}`;
+    } catch (error) {
+      console.warn('Date formatting error:', error);
+      return '';
+    }
+  };
+
+  if (Platform.OS === 'web') {
     const handleWebDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const text = event.target.value;
-      if (!text) return;
-      
-      let selectedDate: Date;
-      if (mode === 'date') {
-        selectedDate = new Date(text + 'T00:00:00');
-      } else if (mode === 'time') {
-        selectedDate = new Date(`1970-01-01T${text}:00`);
-      } else {
-        selectedDate = new Date(text);
+      if (!text) {
+        onDateChange('');
+        return;
       }
       
-      onChange({ type: 'set', nativeEvent: { timestamp: selectedDate.getTime() } }, selectedDate);
+      try {
+        let selectedDate: Date;
+        if (mode === 'date') {
+          selectedDate = new Date(text + 'T00:00:00');
+        } else if (mode === 'time') {
+          selectedDate = new Date(`1970-01-01T${text}:00`);
+        } else {
+          selectedDate = new Date(text);
+        }
+        
+        if (!isNaN(selectedDate.getTime())) {
+          const formattedDate = formatDateDDMMYYYY(selectedDate);
+          onDateChange(formattedDate);
+        }
+      } catch (error) {
+        console.warn('Date change error:', error);
+      }
     };
 
     return (
@@ -56,26 +115,37 @@ export default function WebDatePicker({
           onChange={handleWebDateChange}
           style={{
             padding: '12px',
-            border: '1px solid #ccc',
+            border: error ? '2px solid #f44336' : '1px solid #ccc',
             borderRadius: '4px',
             fontSize: '16px',
             width: '100%',
             backgroundColor: 'white',
             fontFamily: 'inherit',
+            outline: 'none',
             ...style,
           }}
+          placeholder={mode === 'date' ? 'DD-MM-YYYY' : undefined}
         />
       </div>
     );
   }
 
   // Native implementation
+  const dateValue = safeToDate(value);
+  
+  const handleNativeChange = (event: any, selectedDate?: Date) => {
+    if (selectedDate && !isNaN(selectedDate.getTime())) {
+      const formattedDate = formatDateDDMMYYYY(selectedDate);
+      onDateChange(formattedDate);
+    }
+  };
+
   return (
     <DateTimePicker
-      value={value}
+      value={dateValue}
       mode={mode}
       display={display}
-      onChange={onChange}
+      onChange={handleNativeChange}
     />
   );
 } 

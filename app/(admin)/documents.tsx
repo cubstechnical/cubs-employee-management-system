@@ -51,7 +51,12 @@ const DOCUMENT_TYPES = [
   'other'
 ];
 
-export default function AdminDocumentsScreen() {
+export default withAuthGuard({
+  WrappedComponent: AdminDocumentsScreen,
+  allowedRoles: ['admin']
+});
+
+function AdminDocumentsScreen() {
   const theme = useTheme() as CustomTheme;
   const { employees, refreshEmployees } = useEmployees();
   const { employeeId: preSelectedEmployeeId } = useLocalSearchParams();
@@ -174,28 +179,26 @@ export default function AdminDocumentsScreen() {
         const file = result.assets[0];
         const fileName = uploadFileName || file.name;
         
-        // Use DocumentService instead of direct Backblaze upload
-        const { documentService } = await import('../../services/documentService');
+        // Use DocumentService with proper file handling
+        const { uploadDocument } = await import('../../services/documentService');
         
-        const uploadResult = await documentService.uploadDocument({
-          fileUri: file.uri,
-          fileName: fileName,
-          employeeId: uploadEmployee,
-          documentType: uploadDocumentType,
-          uploadedBy: 'admin', // TODO: Get from auth context
-          expiryDate: uploadExpiryDate || undefined,
-          documentNumber: uploadDocumentNumber || undefined,
-          issuingAuthority: uploadIssuingAuthority || undefined,
-          notes: uploadNotes || undefined,
-        });
+        // Create proper file object for upload
+        const fileToUpload = {
+          uri: file.uri,
+          name: fileName,
+          type: file.mimeType || 'application/octet-stream',
+          size: file.size || 0
+        };
         
-        if (uploadResult) {
+        const uploadResult = await uploadDocument(fileToUpload as any, uploadEmployee, uploadDocumentType);
+        
+        if (uploadResult.success) {
           setSnackbar('Document uploaded successfully!');
           setUploadModalVisible(false);
           resetUploadForm();
           await loadDocuments();
         } else {
-          throw new Error('Upload failed');
+          throw new Error(uploadResult.error || 'Upload failed');
         }
       }
     } catch (err) {
@@ -566,15 +569,21 @@ export default function AdminDocumentsScreen() {
           )}
         </ScrollView>
 
-        {/* Upload FAB */}
+        {/* Upload FAB - Enhanced Enterprise Style */}
         <FAB
-          icon="plus"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          icon="upload"
+          style={[styles.fab, { 
+            backgroundColor: theme.colors.primary,
+            elevation: 4,
+          }]}
           onPress={() => setUploadModalVisible(true)}
-          label="Upload"
+          label="Upload Document"
+          size="large"
+          mode="elevated"
+          animated={true}
         />
 
-        {/* Upload Modal */}
+        {/* Enhanced Upload Modal */}
         <Portal>
           <Modal
             visible={uploadModalVisible}
@@ -582,154 +591,203 @@ export default function AdminDocumentsScreen() {
             contentContainerStyle={styles.modalContainer}
           >
             <Surface style={styles.modal} elevation={5}>
-              <Text variant="headlineSmall" style={{ marginBottom: 20, fontWeight: 'bold' }}>
-                Upload Document
-              </Text>
-              
-              <ScrollView style={styles.modalContent}>
-                <Text variant="bodyMedium" style={{ marginBottom: 8, color: theme.colors.onSurface }}>
-                  Employee *
-                </Text>
-                <Menu
-                  visible={false}
-                  onDismiss={() => {}}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => {}}
-                      style={styles.input}
-                    >
-                      {employees.find(emp => emp.id === uploadEmployee)?.name || 'Select Employee'}
-                    </Button>
-                  }
-                >
-                  {employees.map((employee) => (
-                    <Menu.Item
-                      key={employee.id}
-                      onPress={() => setUploadEmployee(employee.id)}
-                      title={employee.name}
-                    />
-                  ))}
-                </Menu>
-                
-                {/* Simple dropdown replacement */}
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Select Employee:
-                </Text>
-                <ScrollView style={styles.employeeList}>
-                  {employees.map((employee) => (
-                    <Button
-                      key={employee.id}
-                      mode={uploadEmployee === employee.id ? 'contained' : 'outlined'}
-                      onPress={() => setUploadEmployee(employee.id)}
-                      style={{ marginBottom: 8 }}
-                    >
-                      {employee.name}
-                    </Button>
-                  ))}
-                </ScrollView>
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Document Type *
-                </Text>
-                <ScrollView style={styles.documentTypeList} horizontal showsHorizontalScrollIndicator={false}>
-                  {DOCUMENT_TYPES.map((type) => (
-                    <Chip
-                      key={type}
-                      selected={uploadDocumentType === type}
-                      onPress={() => setUploadDocumentType(type)}
-                      style={{ marginRight: 8 }}
-                    >
-                      {type.replace('_', ' ').toUpperCase()}
-                    </Chip>
-                  ))}
-                </ScrollView>
-
-                <TextInput
-                  label="Custom File Name (optional)"
-                  value={uploadFileName}
-                  onChangeText={setUploadFileName}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty to use original filename"
-                />
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  {uploadDocumentType === 'visa' ? 'Visa Expiry Date (Required for Visa) *' : 'Expiry Date (optional)'}
-                </Text>
-                <TextInput
-                  label={uploadDocumentType === 'visa' ? 'Visa Expiry Date *' : 'Expiry Date'}
-                  value={uploadExpiryDate}
-                  onChangeText={setUploadExpiryDate}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder={uploadDocumentType === 'visa' ? 'DD-MM-YYYY (Required for visa tracking)' : 'Leave empty if not applicable'}
-                  error={uploadDocumentType === 'visa' && !uploadExpiryDate}
-                  left={<TextInput.Icon icon="calendar" />}
-                />
-                {uploadDocumentType === 'visa' && !uploadExpiryDate && (
-                  <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 4, marginLeft: 12 }}>
-                    Visa expiry date is required for automated visa expiry notifications
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleRow}>
+                  <IconButton 
+                    icon="upload" 
+                    size={28} 
+                    iconColor={theme.colors.primary}
+                    style={styles.modalIcon}
+                  />
+                  <Text variant="headlineSmall" style={styles.modalTitle}>
+                    Upload Document
                   </Text>
+                </View>
+                <IconButton
+                  icon="close"
+                  size={24}
+                  iconColor={theme.colors.onSurfaceVariant}
+                  onPress={() => setUploadModalVisible(false)}
+                />
+              </View>
+              
+              <Divider />
+              
+              <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+                {/* Employee Selection - Enhanced */}
+                <View style={styles.formGroup}>
+                  <Text variant="titleSmall" style={styles.formLabel}>
+                    Select Employee *
+                  </Text>
+                  <Menu
+                    visible={false}
+                    onDismiss={() => {}}
+                    anchor={
+                      <Button
+                        mode="outlined"
+                        onPress={() => {}}
+                        style={styles.enhancedInput}
+                        contentStyle={styles.enhancedButtonContent}
+                        labelStyle={styles.enhancedButtonLabel}
+                        icon="account"
+                      >
+                        {uploadEmployee ? employees.find(e => e.id === uploadEmployee)?.name : 'Select Employee'}
+                      </Button>
+                    }
+                  >
+                    {employees.map((employee) => (
+                      <Menu.Item
+                        key={employee.id}
+                        onPress={() => setUploadEmployee(employee.id)}
+                        title={employee.name}
+                        titleStyle={styles.menuItemTitle}
+                        leadingIcon="account"
+                      />
+                    ))}
+                  </Menu>
+                </View>
+
+                {/* Document Type Selection - Enhanced */}
+                <View style={styles.formGroup}>
+                  <Text variant="titleSmall" style={styles.formLabel}>
+                    Document Type *
+                  </Text>
+                  <Menu
+                    visible={false}
+                    onDismiss={() => {}}
+                    anchor={
+                      <Button
+                        mode="outlined"
+                        onPress={() => {}}
+                        style={styles.enhancedInput}
+                        contentStyle={styles.enhancedButtonContent}
+                        labelStyle={styles.enhancedButtonLabel}
+                        icon="file-document"
+                      >
+                        {uploadDocumentType.replace('_', ' ').toUpperCase()}
+                      </Button>
+                    }
+                  >
+                    {DOCUMENT_TYPES.map((type) => (
+                      <Menu.Item
+                        key={type}
+                        onPress={() => setUploadDocumentType(type)}
+                        title={type.replace('_', ' ').toUpperCase()}
+                        titleStyle={styles.menuItemTitle}
+                        leadingIcon={getDocumentTypeIcon(type)}
+                      />
+                    ))}
+                  </Menu>
+                </View>
+
+                {/* Enhanced File Name Input */}
+                <View style={styles.formGroup}>
+                  <Text variant="titleSmall" style={styles.formLabel}>
+                    File Name (Optional)
+                  </Text>
+                  <TextInput
+                    mode="outlined"
+                    value={uploadFileName}
+                    onChangeText={setUploadFileName}
+                    placeholder="Enter custom file name..."
+                    style={styles.enhancedTextInput}
+                    left={<TextInput.Icon icon="file-document-edit" />}
+                    contentStyle={styles.textInputContent}
+                  />
+                </View>
+
+                {/* Enhanced Document Number Input */}
+                <View style={styles.formGroup}>
+                  <Text variant="titleSmall" style={styles.formLabel}>
+                    Document Number
+                  </Text>
+                  <TextInput
+                    mode="outlined"
+                    value={uploadDocumentNumber}
+                    onChangeText={setUploadDocumentNumber}
+                    placeholder="Enter document number..."
+                    style={styles.enhancedTextInput}
+                    left={<TextInput.Icon icon="identifier" />}
+                    contentStyle={styles.textInputContent}
+                  />
+                </View>
+
+                {/* Conditional Expiry Date - Enhanced */}
+                {(uploadDocumentType === 'visa' || uploadDocumentType === 'passport' || uploadDocumentType === 'emirates_id') && (
+                  <View style={styles.formGroup}>
+                    <Text variant="titleSmall" style={styles.formLabel}>
+                      Expiry Date *
+                    </Text>
+                    <TextInput
+                      mode="outlined"
+                      value={uploadExpiryDate}
+                      onChangeText={setUploadExpiryDate}
+                      placeholder="YYYY-MM-DD"
+                      style={styles.enhancedTextInput}
+                      left={<TextInput.Icon icon="calendar" />}
+                      contentStyle={styles.textInputContent}
+                    />
+                  </View>
                 )}
 
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Document Number (optional)
-                </Text>
-                <TextInput
-                  label="Document Number"
-                  value={uploadDocumentNumber}
-                  onChangeText={setUploadDocumentNumber}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty if not applicable"
-                />
+                {/* Enhanced Issuing Authority Input */}
+                <View style={styles.formGroup}>
+                  <Text variant="titleSmall" style={styles.formLabel}>
+                    Issuing Authority
+                  </Text>
+                  <TextInput
+                    mode="outlined"
+                    value={uploadIssuingAuthority}
+                    onChangeText={setUploadIssuingAuthority}
+                    placeholder="Enter issuing authority..."
+                    style={styles.enhancedTextInput}
+                    left={<TextInput.Icon icon="office-building" />}
+                    contentStyle={styles.textInputContent}
+                  />
+                </View>
 
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Issuing Authority (optional)
-                </Text>
-                <TextInput
-                  label="Issuing Authority"
-                  value={uploadIssuingAuthority}
-                  onChangeText={setUploadIssuingAuthority}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty if not applicable"
-                />
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Notes (optional)
-                </Text>
-                <TextInput
-                  label="Notes"
-                  value={uploadNotes}
-                  onChangeText={setUploadNotes}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty if not applicable"
-                />
+                {/* Enhanced Notes Input */}
+                <View style={styles.formGroup}>
+                  <Text variant="titleSmall" style={styles.formLabel}>
+                    Notes
+                  </Text>
+                  <TextInput
+                    mode="outlined"
+                    value={uploadNotes}
+                    onChangeText={setUploadNotes}
+                    placeholder="Add any additional notes..."
+                    multiline
+                    numberOfLines={3}
+                    style={styles.enhancedTextInput}
+                    left={<TextInput.Icon icon="note-text" />}
+                    contentStyle={styles.textInputContent}
+                  />
+                </View>
               </ScrollView>
 
+              {/* Enhanced Modal Actions */}
+              <Divider />
               <View style={styles.modalActions}>
                 <Button
                   mode="outlined"
-                  onPress={() => {
-                    setUploadModalVisible(false);
-                    resetUploadForm();
-                  }}
-                  style={{ flex: 1, marginRight: 8 }}
+                  onPress={() => setUploadModalVisible(false)}
+                  style={styles.cancelButton}
+                  labelStyle={styles.cancelButtonLabel}
+                  contentStyle={styles.modalButtonContent}
                 >
                   Cancel
                 </Button>
-        <Button
-          mode="contained"
-          onPress={handleUpload}
-          loading={uploading}
-                  disabled={uploading || !uploadEmployee || (uploadDocumentType === 'visa' && !uploadExpiryDate)}
-                  style={{ flex: 1, marginLeft: 8 }}
+                <Button
+                  mode="contained"
+                  onPress={handleUpload}
+                  loading={uploading}
+                  disabled={!uploadEmployee || uploading}
+                  style={styles.uploadButton}
+                  labelStyle={styles.uploadButtonLabel}
+                  contentStyle={styles.modalButtonContent}
                   icon="upload"
                 >
-                  Upload
+                  {uploading ? 'Uploading...' : 'Upload Document'}
                 </Button>
               </View>
             </Surface>
@@ -848,23 +906,67 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 16,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalIcon: {
+    marginRight: 8,
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+  },
   modalContent: {
     maxHeight: 400,
   },
-  input: {
+  formGroup: {
     marginBottom: 16,
   },
-  employeeList: {
-    maxHeight: 120,
-    marginBottom: 16,
+  formLabel: {
+    fontWeight: 'bold',
   },
-  documentTypeList: {
-    marginBottom: 16,
-    paddingVertical: 8,
+  enhancedInput: {
+    marginBottom: 8,
+  },
+  enhancedButtonContent: {
+    paddingHorizontal: 12,
+  },
+  enhancedButtonLabel: {
+    fontWeight: 'bold',
+  },
+  menuItemTitle: {
+    fontWeight: 'bold',
+  },
+  enhancedTextInput: {
+    marginBottom: 8,
+  },
+  textInputContent: {
+    paddingHorizontal: 12,
   },
   modalActions: {
     flexDirection: 'row',
     marginTop: 24,
+  },
+  cancelButton: {
+    flex: 1,
+  },
+  cancelButtonLabel: {
+    fontWeight: 'bold',
+  },
+  modalButtonContent: {
+    padding: 16,
+  },
+  uploadButton: {
+    flex: 1,
+  },
+  uploadButtonLabel: {
+    fontWeight: 'bold',
   },
 }); 
 

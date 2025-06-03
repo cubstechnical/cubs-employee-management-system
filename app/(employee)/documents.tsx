@@ -7,8 +7,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { EmployeeDocument } from '../../services/supabase';
 import { CustomTheme } from '../../theme';
 import { safeThemeAccess } from '../../utils/errorPrevention';
+import { withAuthGuard } from '../../components/AuthGuard';
 
-export default function EmployeeDocumentsScreen() {
+function EmployeeDocumentsScreen() {
   const theme = useTheme() as CustomTheme;
   const { user } = useAuth();
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
@@ -112,4 +113,9 @@ export default function EmployeeDocumentsScreen() {
       <Snackbar visible={!!snackbar} onDismiss={() => setSnackbar('')}>{snackbar}</Snackbar>
     </SafeAreaView>
   );
-} 
+}
+
+export default withAuthGuard({
+  WrappedComponent: EmployeeDocumentsScreen,
+  allowedRoles: ['employee']
+}); 

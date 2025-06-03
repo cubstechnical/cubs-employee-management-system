@@ -5,16 +5,26 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { CustomTheme } from '../../theme';
+import { DESIGN_SYSTEM } from '../../theme/designSystem';
 
 const { width, height } = Dimensions.get('window');
 
-const logoImage = require('../../assets/logo.png');
+// FIXED: Enhanced logo import with proper error handling
+const getLogo = () => {
+  try {
+    return require('../../assets/logo.png');
+  } catch (error) {
+    console.warn('Logo not found at path ../../assets/logo.png, using fallback');
+    return null;
+  }
+};
 
 export default function ForgotPasswordScreen() {
   const theme = useTheme() as CustomTheme;
   const { resetPassword, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [emailSent, setEmailSent] = useState(false);
+  const logoImage = getLogo();
 
   // Animations
   const [fadeAnimation] = useState(new Animated.Value(0));
@@ -58,7 +68,7 @@ export default function ForgotPasswordScreen() {
     return (
       <View style={styles.container}>
         <LinearGradient
-          colors={['#DC143C', '#B71C1C', '#8B0000']}
+          colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600], DESIGN_SYSTEM.colors.primary[700]]}
           style={styles.background}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
@@ -127,7 +137,7 @@ export default function ForgotPasswordScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#DC143C', '#B71C1C', '#8B0000']}
+        colors={[DESIGN_SYSTEM.colors.primary[500], DESIGN_SYSTEM.colors.primary[600], DESIGN_SYSTEM.colors.primary[700]]}
         style={styles.background}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -162,11 +172,24 @@ export default function ForgotPasswordScreen() {
             }
           ]}>
             <Surface style={styles.logoContainer} elevation={5}>
-              <Image 
-                source={logoImage} 
-                style={styles.companyLogo}
-                resizeMode="contain"
-              />
+              {logoImage ? (
+                <Image 
+                  source={logoImage} 
+                  style={styles.companyLogo}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={[styles.companyLogo, styles.logoFallback]}>
+                  <IconButton
+                    icon="domain"
+                    size={48}
+                    iconColor={DESIGN_SYSTEM.colors.primary[500]}
+                  />
+                  <Text variant="titleMedium" style={styles.fallbackText}>
+                    CUBS
+                  </Text>
+                </View>
+              )}
             </Surface>
             <Text variant="titleLarge" style={styles.welcomeText}>
               Forgot Your Password? 🔐
@@ -194,7 +217,12 @@ export default function ForgotPasswordScreen() {
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="email" />}
-                  theme={{ colors: { primary: '#DC143C', outline: '#DC143C' } }}
+                  theme={{ 
+                    colors: { 
+                      primary: DESIGN_SYSTEM.colors.primary[500], 
+                      outline: DESIGN_SYSTEM.colors.primary[500] 
+                    } 
+                  }}
                 />
 
                 <Button
@@ -390,6 +418,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   resendButtonText: {
+    color: '#DC143C',
+    fontWeight: 'bold',
+  },
+  logoFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fallbackText: {
     color: '#DC143C',
     fontWeight: 'bold',
   },

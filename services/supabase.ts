@@ -74,16 +74,16 @@ export interface Employee {
   name: string;
   trade: string;
   nationality: string;
-  date_of_birth: string;
+  date_of_birth: string | null;
   mobile_number: string;
   home_phone_number: string | null;
   email_id: string;
-  company_id: string;
+  company_id: number;
   company_name: string;
-  join_date: string;
-  visa_expiry_date: string;
+  join_date: string | null;
+  visa_expiry_date: string | null;
   visa_status: string;
-  passport_number: string;
+  passport_number: string | null;
   status: string;
   is_active: boolean;
 }

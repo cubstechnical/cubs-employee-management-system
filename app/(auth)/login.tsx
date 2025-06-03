@@ -1,328 +1,381 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Dimensions, Animated, Image, Platform } from 'react-native';
-import { Text, TextInput, Button, Card, useTheme, Surface, IconButton, Chip, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Dimensions, Animated, Platform, Alert, Image } from 'react-native';
+import {
+  Text,
+  TextInput,
+  Button,
+  useTheme,
+  Surface,
+  IconButton,
+  Divider,
+  Card,
+  Snackbar,
+  ActivityIndicator,
+} from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { CustomTheme } from '../../theme';
+import { DESIGN_SYSTEM } from '../../theme/designSystem';
 
 const { width, height } = Dimensions.get('window');
-const logoImage = require('../../assets/logo.png');
+
+// ENHANCED: Logo import with robust fallback
+const getLogo = () => {
+  try {
+    return require('../../assets/logo.png');
+  } catch (error) {
+    console.warn('Logo image not found in login, using fallback');
+    return null;
+  }
+};
+
+// ENHANCED: Background image import
+const getBackgroundImage = () => {
+  try {
+    return require('../../assets/bg.jpg');
+  } catch (error) {
+    console.warn('Background image not found, using fallback gradient');
+    return null;
+  }
+};
 
 export default function LoginScreen() {
   const theme = useTheme() as CustomTheme;
-  const { signIn, isLoading } = useAuth();
+  const { login, isLoading, error } = useAuth();
+  const logoImage = getLogo();
+  const backgroundImage = getBackgroundImage();
+  
+  // Form State
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
-  // Enhanced animations
+  
+  // UI State
+  const [snackbar, setSnackbar] = useState('');
+  const [formErrors, setFormErrors] = useState<{email?: string, password?: string}>({});
+  
+  // Animations
   const [fadeAnimation] = useState(new Animated.Value(0));
   const [slideAnimation] = useState(new Animated.Value(30));
-  const [logoAnimation] = useState(new Animated.Value(0));
-  const [cardAnimation] = useState(new Animated.Value(0));
+
+  // ENHANCED: Responsive breakpoints
+  const isMobile = width <= DESIGN_SYSTEM.breakpoints.tablet;
 
   useEffect(() => {
-    // Staggered entrance animations
-    Animated.sequence([
+    // Enhanced entrance animation
+    Animated.parallel([
       Animated.timing(fadeAnimation, {
         toValue: 1,
-        duration: 800,
+        duration: DESIGN_SYSTEM.animation.duration.slow,
         useNativeDriver: true,
       }),
-      Animated.parallel([
-        Animated.spring(slideAnimation, {
-          toValue: 0,
-          tension: 40,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-        Animated.spring(logoAnimation, {
-          toValue: 1,
-          tension: 30,
-          friction: 5,
-          useNativeDriver: true,
-        }),
-        Animated.spring(cardAnimation, {
-          toValue: 1,
-          tension: 50,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]),
+      Animated.spring(slideAnimation, {
+        toValue: 0,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, []);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please enter both email and password');
-      return;
+  // ENHANCED: Form validation with accessibility
+  const validateForm = () => {
+    const errors: {email?: string, password?: string} = {};
+    
+    if (!email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      errors.email = 'Please enter a valid email address';
     }
+    
+    if (!password.trim()) {
+      errors.password = 'Password is required';
+    } else if (password.length < 6) {
+      errors.password = 'Password must be at least 6 characters';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
+  // ENHANCED: Login handler with better error handling
+  const handleLogin = async () => {
+    if (!validateForm()) return;
+    
     try {
-      console.log('🔐 [LOGIN] Attempting login for:', email);
-      await signIn(email, password);
-      console.log('✅ [LOGIN] Login successful, redirecting to dashboard');
-      router.replace('/(admin)/dashboard');
-    } catch (error) {
-      console.error('❌ [LOGIN] Login failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
+      await login(email.trim(), password);
+      setSnackbar('Login successful! Redirecting...');
       
-      // Provide user-friendly error messages
-      let userMessage = 'Invalid credentials. Please try again.';
+      // Smooth transition to dashboard
+      setTimeout(() => {
+        router.replace('/(admin)/dashboard');
+      }, 1000);
       
-      if (errorMessage.includes('Invalid login credentials')) {
-        userMessage = 'Invalid email or password. Please check your credentials and try again.';
-      } else if (errorMessage.includes('Email not confirmed')) {
-        userMessage = 'Please check your email and confirm your account before signing in.';
-      } else if (errorMessage.includes('Too many requests')) {
-        userMessage = 'Too many login attempts. Please wait a moment and try again.';
-      } else if (errorMessage.includes('Network')) {
-        userMessage = 'Network error. Please check your connection and try again.';
-      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      const errorMessage = error?.message || 'Login failed. Please check your credentials.';
+      setSnackbar(errorMessage);
       
-      Alert.alert('Login Failed', userMessage);
+      // Shake animation for error feedback
+      Animated.sequence([
+        Animated.timing(slideAnimation, { toValue: -10, duration: 100, useNativeDriver: true }),
+        Animated.timing(slideAnimation, { toValue: 10, duration: 100, useNativeDriver: true }),
+        Animated.timing(slideAnimation, { toValue: 0, duration: 100, useNativeDriver: true }),
+      ]).start();
     }
+  };
+
+  // ENHANCED: Navigation helpers
+  const navigateToForgotPassword = () => {
+    router.push('/(auth)/forgot-password');
   };
 
   return (
     <View style={styles.container}>
-      {/* Enhanced Background Gradient */}
-      <LinearGradient
-        colors={['#DC143C', '#B71C1C', '#8B0000']} // Ferrari Red gradient - back to original
-        style={styles.background}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+      {backgroundImage ? (
+        <Image 
+          source={backgroundImage}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+      ) : (
+        <LinearGradient
+          colors={[
+            DESIGN_SYSTEM.colors.primary[500],
+            DESIGN_SYSTEM.colors.primary[600],
+            DESIGN_SYSTEM.colors.primary[700]
+          ]}
+          style={styles.background}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        />
+      )}
+      
+      {/* Dark overlay for better text readability */}
+      <View style={styles.overlay} />
+      
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Animated Background Elements */}
         <Animated.View style={[
-          styles.backgroundCircle1,
+          styles.centerContainer,
           {
-            opacity: fadeAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, 0.1],
-            }),
-            transform: [{
-              scale: logoAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.8, 1.2],
-              })
-            }]
+            opacity: fadeAnimation,
+            transform: [{ translateY: slideAnimation }]
           }
-        ]} />
-        <Animated.View style={[
-          styles.backgroundCircle2,
-          {
-            opacity: fadeAnimation.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0, 0.05],
-            }),
-            transform: [{
-              scale: cardAnimation.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1.2, 0.9],
-              })
-            }]
-          }
-        ]} />
-
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          {/* Company Logo and Branding */}
-          <Animated.View style={[
-            styles.logoSection,
-            {
-              opacity: logoAnimation,
-              transform: [{
-                translateY: logoAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [-20, 0],
-                })
-              }, {
-                scale: logoAnimation.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.8, 1],
-                })
-              }]
-            }
-          ]}>
-            <Surface style={styles.logoContainer} elevation={5}>
+        ]}>
+          {/* ENTERPRISE: Logo Section */}
+          <Surface style={styles.logoContainer} elevation={5}>
+            {logoImage ? (
               <Image 
                 source={logoImage} 
                 style={styles.companyLogo}
                 resizeMode="contain"
               />
-            </Surface>
-            <Text variant="displaySmall" style={styles.companyName}>
-              CUBS Technical
-            </Text>
-            <Text variant="titleLarge" style={styles.tagline}>
-              Employee Management System
-            </Text>
-          </Animated.View>
-
-          {/* Enhanced Login Card */}
-          <Animated.View style={[
-            {
-              opacity: cardAnimation,
-              transform: [
-                {
-                  translateY: cardAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0],
-                  })
-                },
-                {
-                  scale: cardAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.95, 1],
-                  })
-                }
-              ]
-            }
-          ]}>
-            <Surface style={styles.loginCard} elevation={5}>
-              <View style={styles.cardHeader}>
-                <Text variant="headlineMedium" style={styles.welcomeTitle}>
-                  Welcome Back! 👋
-                </Text>
-                <Text variant="bodyLarge" style={styles.welcomeSubtitle}>
-                  Sign in to access your dashboard
+            ) : (
+              <View style={styles.logoFallback}>
+                <IconButton
+                  icon="domain"
+                  size={48}
+                  iconColor={DESIGN_SYSTEM.colors.primary[500]}
+                />
+                <Text variant="headlineSmall" style={styles.fallbackText}>
+                  CUBS
                 </Text>
               </View>
+            )}
+          </Surface>
+          
+          <Text variant="headlineLarge" style={styles.welcomeTitle}>
+            Welcome Back
+          </Text>
+          <Text variant="titleMedium" style={styles.enterpriseTagline}>
+            Enterprise-level Security
+          </Text>
 
-              <View style={styles.form}>
+          {/* ENTERPRISE: Main Login Card - Perfectly Centered */}
+          <Card style={styles.loginCard} elevation={5}>
+            <Card.Content style={styles.cardContent}>
+              <Text variant="titleLarge" style={styles.loginTitle}>
+                Sign In to Your Account
+              </Text>
+              
+              {/* FIXED: Enhanced Email Input with Perfect Styling */}
+              <View style={styles.inputGroup}>
                 <TextInput
                   label="Email Address"
                   value={email}
-                  onChangeText={setEmail}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (formErrors.email) {
+                      setFormErrors(prev => ({...prev, email: undefined}));
+                    }
+                  }}
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  autoComplete="email"
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="email" />}
+                  error={!!formErrors.email}
                   theme={{
                     colors: {
-                      primary: '#DC143C', // Ferrari Red
-                      outline: '#DC143C',
+                      primary: DESIGN_SYSTEM.colors.primary[500],
+                      outline: formErrors.email ? DESIGN_SYSTEM.colors.error.main : DESIGN_SYSTEM.colors.neutral[300],
+                      onSurfaceVariant: DESIGN_SYSTEM.colors.neutral[800],
+                      onSurface: DESIGN_SYSTEM.colors.neutral[900],
+                      surface: DESIGN_SYSTEM.colors.neutral[0],
+                      background: DESIGN_SYSTEM.colors.neutral[0],
                     }
                   }}
+                  textColor={DESIGN_SYSTEM.colors.neutral[900]}
+                  placeholderTextColor={DESIGN_SYSTEM.colors.neutral[500]}
+                  contentStyle={{
+                    color: DESIGN_SYSTEM.colors.neutral[900],
+                  }}
                 />
+                {formErrors.email && (
+                  <Text variant="bodySmall" style={styles.errorText}>
+                    {formErrors.email}
+                  </Text>
+                )}
+              </View>
 
+              {/* FIXED: Enhanced Password Input with Perfect Styling */}
+              <View style={styles.inputGroup}>
                 <TextInput
                   label="Password"
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (formErrors.password) {
+                      setFormErrors(prev => ({...prev, password: undefined}));
+                    }
+                  }}
                   secureTextEntry={!showPassword}
+                  autoComplete="current-password"
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="lock" />}
                   right={
-                    <TextInput.Icon
-                      icon={showPassword ? 'eye-off' : 'eye'}
+                    <TextInput.Icon 
+                      icon={showPassword ? "eye-off" : "eye"} 
                       onPress={() => setShowPassword(!showPassword)}
                     />
                   }
+                  error={!!formErrors.password}
                   theme={{
                     colors: {
-                      primary: '#DC143C', // Ferrari Red
-                      outline: '#DC143C',
+                      primary: DESIGN_SYSTEM.colors.primary[500],
+                      outline: formErrors.password ? DESIGN_SYSTEM.colors.error.main : DESIGN_SYSTEM.colors.neutral[300],
+                      onSurfaceVariant: DESIGN_SYSTEM.colors.neutral[800],
+                      onSurface: DESIGN_SYSTEM.colors.neutral[900],
+                      surface: DESIGN_SYSTEM.colors.neutral[0],
+                      background: DESIGN_SYSTEM.colors.neutral[0],
                     }
                   }}
+                  textColor={DESIGN_SYSTEM.colors.neutral[900]}
+                  placeholderTextColor={DESIGN_SYSTEM.colors.neutral[500]}
+                  contentStyle={{
+                    color: DESIGN_SYSTEM.colors.neutral[900],
+                  }}
                 />
+                {formErrors.password && (
+                  <Text variant="bodySmall" style={styles.errorText}>
+                    {formErrors.password}
+                  </Text>
+                )}
+              </View>
 
+              {/* ENTERPRISE: Login Actions */}
+              <View style={styles.actionSection}>
                 <Button
                   mode="contained"
                   onPress={handleLogin}
                   loading={isLoading}
                   disabled={isLoading}
                   style={styles.loginButton}
-                  labelStyle={styles.loginButtonText}
+                  contentStyle={styles.loginButtonContent}
+                  labelStyle={styles.loginButtonLabel}
                   icon="login"
                 >
                   {isLoading ? 'Signing In...' : 'Sign In'}
                 </Button>
-
-                {/* Additional Auth Options */}
-                <View style={styles.authOptions}>
-                  <Button
-                    mode="text"
-                    onPress={() => router.push('/(auth)/forgot-password')}
-                    style={styles.textButton}
-                    labelStyle={[styles.textButtonLabel, { color: theme.colors.primary }]}
-                  >
-                    Forgot Password?
-                  </Button>
-
-                  {/* Divider */}
-                  <View style={styles.dividerContainer}>
-                    <View style={styles.dividerLine} />
-                    <Text variant="bodySmall" style={styles.dividerText}>or</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-
-                  {/* Google Sign In */}
-                  <Button
-                    mode="outlined"
-                    onPress={() => Alert.alert('Google Sign In', 'Google authentication will be implemented')}
-                    style={[styles.googleButton, { borderColor: theme.colors.primary }]}
-                    labelStyle={[styles.googleButtonText, { color: theme.colors.primary }]}
-                    icon="google"
-                    contentStyle={styles.googleButtonContent}
-                  >
-                    Continue with Google
-                  </Button>
-
-                  {/* Sign Up Link */}
-                  <View style={styles.signupContainer}>
-                    <Text variant="bodyMedium" style={styles.signupText}>
-                      Don't have an account?{' '}
-                    </Text>
-                    <Button
-                      mode="text"
-                      onPress={() => router.push('/(auth)/signup')}
-                      style={styles.signupButton}
-                      labelStyle={[styles.signupButtonLabel, { color: theme.colors.primary }]}
-                      compact
-                    >
-                      Sign Up
-                    </Button>
-                  </View>
+                 
+                 {/* ENTERPRISE: Forgot Password Link */}
+                 <View style={styles.navigationSection}>
+                   <Button
+                     mode="text"
+                     onPress={navigateToForgotPassword}
+                     style={styles.linkButton}
+                     labelStyle={styles.linkButtonLabel}
+                     icon="help-circle"
+                   >
+                     Forgot Password?
+                   </Button>
+                 </View>
                 </View>
-              </View>
-            </Surface>
-          </Animated.View>
+            </Card.Content>
+          </Card>
 
-          {/* Animated Footer */}
-          <Animated.View style={[
-            styles.footer,
-            {
-              opacity: fadeAnimation,
-              transform: [{
-                translateY: slideAnimation
-              }]
-            }
-          ]}>
+          {/* ENTERPRISE: Security Features Section */}
+          <Surface style={styles.securitySection} elevation={3}>
+            <Text variant="titleMedium" style={styles.securityTitle}>
+              🔒 Enterprise Security Features
+            </Text>
+            
+            <View style={styles.securityFeatures}>
+              <View style={styles.securityFeature}>
+                <IconButton icon="shield-check" size={20} iconColor={DESIGN_SYSTEM.colors.success.main} />
+                <Text variant="bodyMedium" style={styles.securityText}>
+                  AES-256 Data Encryption
+                </Text>
+              </View>
+              
+              <View style={styles.securityFeature}>
+                <IconButton icon="key" size={20} iconColor={DESIGN_SYSTEM.colors.info.main} />
+                <Text variant="bodyMedium" style={styles.securityText}>
+                  JWT-based Authentication
+                </Text>
+              </View>
+              
+              <View style={styles.securityFeature}>
+                <IconButton icon="email-outline" size={20} iconColor={DESIGN_SYSTEM.colors.primary[500]} />
+                <Text variant="bodyMedium" style={styles.securityText}>
+                  Secure Email Verification
+                </Text>
+              </View>
+            </View>
+          </Surface>
+
+          {/* Footer Branding */}
+          <View style={styles.footer}>
             <Text variant="bodySmall" style={styles.footerText}>
-              © 2024 CUBS Technical Contracting. All rights reserved.
+              © 2024 CUBS Technical • Employee Management System
             </Text>
             <Text variant="bodySmall" style={styles.footerSubtext}>
-              Powered by advanced cloud technology
+              Enterprise • Secure • Professional
             </Text>
-          </Animated.View>
-        </ScrollView>
-
-        {/* Loading Overlay */}
-        {isLoading && (
-          <View style={styles.loadingOverlay}>
-            <Surface style={styles.loadingContainer} elevation={5}>
-              <ActivityIndicator size="large" color="#DC143C" />
-              <Text variant="bodyMedium" style={styles.loadingText}>
-                Authenticating...
-              </Text>
-            </Surface>
           </View>
-        )}
-      </LinearGradient>
+        </Animated.View>
+      </ScrollView>
+
+      {/* ENHANCED: Success/Error Feedback */}
+      <Snackbar
+        visible={!!snackbar}
+        onDismiss={() => setSnackbar('')}
+        duration={4000}
+        style={styles.snackbar}
+        action={{
+          label: 'Dismiss',
+          onPress: () => setSnackbar(''),
+        }}
+      >
+        {snackbar}
+      </Snackbar>
     </View>
   );
 }
@@ -333,193 +386,188 @@ const styles = StyleSheet.create({
   },
   background: {
     flex: 1,
-    position: 'relative',
   },
-  backgroundCircle1: {
+  backgroundImage: {
     position: 'absolute',
-    width: width * 1.5,
-    height: width * 1.5,
-    borderRadius: width * 0.75,
-    backgroundColor: 'white',
-    top: -width * 0.7,
-    right: -width * 0.5,
+    width: '100%',
+    height: '100%',
+    top: 0,
+    left: 0,
   },
-  backgroundCircle2: {
+  overlay: {
     position: 'absolute',
-    width: width * 1.2,
-    height: width * 1.2,
-    borderRadius: width * 0.6,
-    backgroundColor: 'white',
-    bottom: -width * 0.6,
-    left: -width * 0.4,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    top: 0,
+    left: 0,
   },
-  content: {
+  scrollContent: {
     flexGrow: 1,
-    padding: 24,
     justifyContent: 'center',
+    alignItems: 'center',
+    padding: DESIGN_SYSTEM.spacing[6],
     minHeight: height,
   },
-  logoSection: {
+  centerContainer: {
+    width: '100%',
+    maxWidth: 420,
     alignItems: 'center',
-    marginBottom: 40,
   },
+  
+  // ENTERPRISE: Logo Section
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 24,
+    width: 100,
+    height: 100,
+    borderRadius: 20,
     backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    padding: 16,
+    marginBottom: DESIGN_SYSTEM.spacing[4],
+    padding: DESIGN_SYSTEM.spacing[3],
   },
   companyLogo: {
-    width: 80,
-    height: 80,
+    width: 70,
+    height: 70,
   },
-  companyName: {
+  logoFallback: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fallbackText: {
+    color: DESIGN_SYSTEM.colors.primary[500],
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  
+  // ENTERPRISE: Header Section
+  welcomeTitle: {
     color: 'white',
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 8,
-    ...Platform.select({
-      ios: {
-        textShadowColor: 'rgba(0,0,0,0.3)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
-      },
-      android: {
-    textShadowColor: 'rgba(0,0,0,0.3)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-      },
-      web: {
-        textShadow: '0px 2px 4px rgba(0,0,0,0.3)',
-      }
-    })
+    marginBottom: DESIGN_SYSTEM.spacing[2],
   },
-  tagline: {
+  enterpriseTagline: {
     color: 'rgba(255,255,255,0.9)',
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '600',
+    marginBottom: DESIGN_SYSTEM.spacing[8],
+    fontSize: 18,
   },
+  
+  // ENTERPRISE: Main Login Card - Perfectly Centered
   loginCard: {
+    width: '100%',
     borderRadius: 24,
-    padding: 32,
     backgroundColor: 'rgba(255,255,255,0.98)',
-    marginHorizontal: width < 768 ? 0 : 40,
+    marginBottom: DESIGN_SYSTEM.spacing[6],
     ...Platform.select({
       ios: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
       },
       android: {
         elevation: 8,
       },
       web: {
-        boxShadow: '0px 8px 20px rgba(0,0,0,0.15)',
+        boxShadow: '0px 8px 32px rgba(0,0,0,0.15)',
       }
     })
   },
-  cardHeader: {
-    alignItems: 'center',
-    marginBottom: 32,
+  cardContent: {
+    padding: DESIGN_SYSTEM.spacing[8],
   },
-  welcomeTitle: {
+  loginTitle: {
     color: '#1a1a1a',
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: DESIGN_SYSTEM.spacing[6],
   },
-  welcomeSubtitle: {
-    color: '#666',
-    textAlign: 'center',
-    opacity: 0.8,
-  },
-  form: {
-    gap: 20,
+  
+  // FIXED: Input Styling
+  inputGroup: {
+    marginBottom: DESIGN_SYSTEM.spacing[4],
   },
   input: {
-    backgroundColor: 'transparent',
+    backgroundColor: 'white',
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  errorText: {
+    color: DESIGN_SYSTEM.colors.error.main,
+    fontSize: 12,
+    marginTop: 4,
+    paddingLeft: 12,
+  },
+  
+  // ENTERPRISE: Action Section
+  actionSection: {
+    marginTop: DESIGN_SYSTEM.spacing[4],
+    gap: DESIGN_SYSTEM.spacing[4],
   },
   loginButton: {
-    backgroundColor: '#C53030', // Updated professional red
+    backgroundColor: DESIGN_SYSTEM.colors.primary[500],
     borderRadius: 16,
     paddingVertical: 8,
-    marginTop: 8,
     elevation: 6,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#C53030',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-      },
-      android: {
-    elevation: 6,
-      },
-      web: {
-        boxShadow: '0px 4px 8px rgba(197,48,48,0.3)',
-      }
-    })
   },
-  loginButtonText: {
+  loginButtonContent: {
+    paddingVertical: 8,
+  },
+  loginButtonLabel: {
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
   },
-  securityBadge: {
-    borderRadius: 16,
-    padding: 20,
-    backgroundColor: 'rgba(248,250,252,0.95)',
-    marginTop: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(220,20,60,0.1)',
-  },
-  securityContent: {
-    flexDirection: 'row',
+  navigationSection: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginTop: DESIGN_SYSTEM.spacing[4],
   },
-  securityIcon: {
-    backgroundColor: 'rgba(220,20,60,0.1)',
+  linkButton: {
+    alignSelf: 'center',
+  },
+  linkButtonLabel: {
+    fontWeight: '600',
+    fontSize: 14,
+    color: DESIGN_SYSTEM.colors.primary[500],
+  },
+  
+  // ENTERPRISE: Security Section
+  securitySection: {
+    width: '100%',
     borderRadius: 20,
-  },
-  securityText: {
-    flex: 1,
-    marginLeft: 12,
+    padding: DESIGN_SYSTEM.spacing[6],
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    marginBottom: DESIGN_SYSTEM.spacing[6],
   },
   securityTitle: {
     color: '#1a1a1a',
     fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  securityDescription: {
-    color: '#666',
-    lineHeight: 16,
+    textAlign: 'center',
+    marginBottom: DESIGN_SYSTEM.spacing[4],
   },
   securityFeatures: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    gap: DESIGN_SYSTEM.spacing[3],
   },
   securityFeature: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    paddingHorizontal: DESIGN_SYSTEM.spacing[2],
   },
-  featureText: {
-    color: '#666',
-    fontSize: 10,
+  securityText: {
+    color: DESIGN_SYSTEM.colors.neutral[700],
     fontWeight: '500',
+    flex: 1,
+    marginLeft: DESIGN_SYSTEM.spacing[2],
   },
+  
+  // Footer
   footer: {
     alignItems: 'center',
-    marginTop: 40,
-    paddingTop: 20,
+    marginTop: DESIGN_SYSTEM.spacing[4],
   },
   footerText: {
     color: 'rgba(255,255,255,0.8)',
@@ -530,78 +578,9 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     textAlign: 'center',
   },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingContainer: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    minWidth: 120,
-  },
-  loadingText: {
-    marginTop: 12,
-    color: '#DC143C',
-    fontWeight: '500',
-  },
-  authOptions: {
-    marginTop: 24,
-    gap: 16,
-  },
-  textButton: {
-    alignSelf: 'center',
-  },
-  textButtonLabel: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  dividerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 8,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-  },
-  dividerText: {
-    color: 'rgba(0,0,0,0.5)',
-    marginHorizontal: 16,
-    fontSize: 12,
-  },
-  googleButton: {
-    borderWidth: 1.5,
-    borderRadius: 12,
-    paddingVertical: 6,
-  },
-  googleButtonText: {
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  googleButtonContent: {
-    paddingVertical: 4,
-  },
-  signupContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  signupText: {
-    color: '#666',
-    fontSize: 14,
-  },
-  signupButton: {
-    padding: 0,
-    minWidth: 0,
-  },
-  signupButtonLabel: {
-    fontWeight: 'bold',
-    fontSize: 14,
+  
+  // Snackbar
+  snackbar: {
+    backgroundColor: DESIGN_SYSTEM.colors.primary[500],
   },
 }); 

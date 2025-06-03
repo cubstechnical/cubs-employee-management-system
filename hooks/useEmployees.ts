@@ -10,10 +10,15 @@ interface EmployeesState {
   stats: {
     total: number;
     active: number;
-    expiring: number;
-    expired: number;
+    inactive: number;
+    visaExpiring: number;
+    visaExpired: number;
     companiesCount: number;
   };
+  
+  // NEW: Filter data
+  availableTrades: string[];
+  availableCompanies: string[];
   
   // Actions
   fetchEmployees: () => Promise<void>;
@@ -26,10 +31,21 @@ interface EmployeesState {
   deleteEmployee: (id: string) => Promise<void>;
   searchEmployees: (searchTerm: string) => Promise<Employee[]>;
   getEmployeesWithExpiringVisas: (daysThreshold?: number) => Promise<Employee[]>;
-  bulkImportEmployees: (employees: CreateEmployeeData[]) => Promise<Employee[]>;
   fetchStats: () => Promise<void>;
   clearError: () => void;
   getEmployeeByEmail: (email: string) => Promise<Employee | null>;
+  
+  // NEW: Filter methods
+  fetchEmployeesByTrade: (trade: string) => Promise<Employee[]>;
+  fetchEmployeesByCompanyName: (companyName: string) => Promise<Employee[]>;
+  fetchFilteredEmployees: (filters: {
+    trade?: string;
+    companyName?: string;
+    isActive?: boolean;
+    visaStatus?: string;
+    searchQuery?: string;
+  }) => Promise<Employee[]>;
+  loadFilterOptions: () => Promise<void>;
 }
 
 export const useEmployees = create<EmployeesState>((set, get) => ({
@@ -39,211 +55,292 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
   stats: {
     total: 0,
     active: 0,
-    expiring: 0,
-    expired: 0,
+    inactive: 0,
+    visaExpiring: 0,
+    visaExpired: 0,
     companiesCount: 0,
   },
+  availableTrades: [],
+  availableCompanies: [],
 
   fetchEmployees: async () => {
+    set({ isLoading: true, error: null });
     try {
-      set({ isLoading: true, error: null });
       const employees = await employeeService.getAllEmployees();
       set({ employees, isLoading: false });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employees';
-      console.error('Error fetching employees:', error);
-      set({ error: errorMessage, isLoading: false });
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch employees',
+        isLoading: false 
+      });
+    }
+  },
+
+  refreshEmployees: async () => {
+    const { fetchEmployees, fetchStats, loadFilterOptions } = get();
+    await Promise.all([
+      fetchEmployees(),
+      fetchStats(),
+      loadFilterOptions()
+    ]);
+  },
+
+  addEmployee: async (employeeData: any) => {
+    set({ isLoading: true, error: null });
+    try {
+      console.log('🎯 Hook: Adding employee with data:', employeeData);
+      
+      // Validate required fields
+      if (!employeeData.name || !employeeData.email_id) {
+        throw new Error('Name and email are required fields');
+      }
+
+      // Check for duplicate employee ID or email
+      const { employees } = get();
+      const duplicateId = employees.find(emp => emp.employee_id === employeeData.employee_id);
+      const duplicateEmail = employees.find(emp => emp.email_id === employeeData.email_id);
+      
+      if (duplicateId) {
+        throw new Error(`Employee ID "${employeeData.employee_id}" already exists`);
+      }
+      
+      if (duplicateEmail) {
+        throw new Error(`Email "${employeeData.email_id}" already exists`);
+      }
+
+      const newEmployee = await employeeService.createEmployee(employeeData);
+      
+      set(state => ({ 
+        employees: [newEmployee, ...state.employees],
+        isLoading: false 
+      }));
+      
+      // Refresh stats and filter options
+      get().fetchStats();
+      get().loadFilterOptions();
+      
+      console.log('✅ Hook: Employee added successfully');
+      return newEmployee;
+    } catch (error) {
+      console.error('❌ Hook: Error adding employee:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to add employee',
+        isLoading: false 
+      });
       throw error;
     }
   },
 
-  // Alias for fetchEmployees to match component expectations
-  refreshEmployees: async () => {
-    return get().fetchEmployees();
-  },
-
-  // Alias for createEmployee to match component expectations
-  addEmployee: async (employeeData: any) => {
-    return get().createEmployee(employeeData);
-  },
-
   fetchEmployeeById: async (id: string) => {
     try {
-      set({ error: null });
-      const employee = await employeeService.getEmployeeById(id);
-      return employee;
+      return await employeeService.getEmployeeById(id);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employee';
-      console.error('Error fetching employee:', error);
-      set({ error: errorMessage });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch employee' });
+      return null;
     }
   },
 
   fetchEmployeesByCompany: async (companyId: string) => {
     try {
-      set({ error: null });
-      const employees = await employeeService.getEmployeesByCompany(companyId);
-      return employees;
+      return await employeeService.getEmployeesByCompany(companyId);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employees by company';
-      console.error('Error fetching employees by company:', error);
-      set({ error: errorMessage });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch employees' });
+      return [];
     }
   },
 
   createEmployee: async (employeeData: CreateEmployeeData) => {
+    set({ isLoading: true, error: null });
     try {
-      set({ isLoading: true, error: null });
       const newEmployee = await employeeService.createEmployee(employeeData);
-      
-      // Update local state
-      const currentEmployees = get().employees;
-      set({ 
-        employees: [newEmployee, ...currentEmployees],
+      set(state => ({ 
+        employees: [newEmployee, ...state.employees],
         isLoading: false 
-      });
+      }));
       
-      // Refresh stats
+      // Refresh stats and filter options
       get().fetchStats();
+      get().loadFilterOptions();
       
       return newEmployee;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create employee';
-      console.error('Error creating employee:', error);
-      set({ error: errorMessage, isLoading: false });
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to create employee',
+        isLoading: false 
+      });
       throw error;
     }
   },
 
   updateEmployee: async (id: string, employeeData: UpdateEmployeeData) => {
+    set({ isLoading: true, error: null });
     try {
-      set({ isLoading: true, error: null });
+      console.log('🎯 Hook: Updating employee:', { id, employeeData });
+      
+      // Validate ID
+      if (!id) {
+        throw new Error('Employee ID is required for update');
+      }
+
+      // Check if employee exists in current state
+      const { employees } = get();
+      const existingEmployee = employees.find(emp => emp.id === id);
+      if (!existingEmployee) {
+        throw new Error('Employee not found in current data');
+      }
+
+      // Check for duplicate employee ID or email (excluding current employee)
+      if (employeeData.employee_id) {
+        const duplicateId = employees.find(emp => emp.id !== id && emp.employee_id === employeeData.employee_id);
+        if (duplicateId) {
+          throw new Error(`Employee ID "${employeeData.employee_id}" already exists`);
+        }
+      }
+      
+      if (employeeData.email_id) {
+        const duplicateEmail = employees.find(emp => emp.id !== id && emp.email_id === employeeData.email_id);
+        if (duplicateEmail) {
+          throw new Error(`Email "${employeeData.email_id}" already exists`);
+        }
+      }
+
       const updatedEmployee = await employeeService.updateEmployee(id, employeeData);
       
-      // Update local state
-      const currentEmployees = get().employees;
-      const updatedEmployees = currentEmployees.map(emp => 
-        emp.id === id ? updatedEmployee : emp
-      );
-      set({ 
-        employees: updatedEmployees,
-        isLoading: false 
-      });
+      set(state => ({
+        employees: state.employees.map(emp => 
+          emp.id === id ? updatedEmployee : emp
+        ),
+        isLoading: false
+      }));
       
-      // Refresh stats
+      // Refresh stats and filter options in case trade/company changed
       get().fetchStats();
+      get().loadFilterOptions();
       
+      console.log('✅ Hook: Employee updated successfully');
       return updatedEmployee;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to update employee';
-      console.error('Error updating employee:', error);
-      set({ error: errorMessage, isLoading: false });
+      console.error('❌ Hook: Error updating employee:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to update employee',
+        isLoading: false 
+      });
       throw error;
     }
   },
 
   deleteEmployee: async (id: string) => {
+    set({ isLoading: true, error: null });
     try {
-      set({ isLoading: true, error: null });
       await employeeService.deleteEmployee(id);
+      set(state => ({
+        employees: state.employees.filter(emp => emp.id !== id),
+        isLoading: false
+      }));
       
-      // Update local state
-      const currentEmployees = get().employees;
-      const filteredEmployees = currentEmployees.filter(emp => emp.id !== id);
+      // Refresh stats and filter options
+      get().fetchStats();
+      get().loadFilterOptions();
+    } catch (error) {
       set({ 
-        employees: filteredEmployees,
+        error: error instanceof Error ? error.message : 'Failed to delete employee',
         isLoading: false 
       });
-      
-      // Refresh stats
-      get().fetchStats();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to delete employee';
-      console.error('Error deleting employee:', error);
-      set({ error: errorMessage, isLoading: false });
       throw error;
     }
   },
 
   searchEmployees: async (searchTerm: string) => {
     try {
-      set({ error: null });
-      const employees = await employeeService.searchEmployees(searchTerm);
-      return employees;
+      return await employeeService.searchEmployees(searchTerm);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to search employees';
-      console.error('Error searching employees:', error);
-      set({ error: errorMessage });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Failed to search employees' });
+      return [];
     }
   },
 
-  getEmployeesWithExpiringVisas: async (daysThreshold: number = 30) => {
+  getEmployeesWithExpiringVisas: async (daysThreshold = 30) => {
     try {
-      set({ error: null });
-      const employees = await employeeService.getEmployeesWithExpiringVisas(daysThreshold);
-      return employees;
+      return await employeeService.getEmployeesWithExpiringVisas(daysThreshold);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employees with expiring visas';
-      console.error('Error fetching employees with expiring visas:', error);
-      set({ error: errorMessage });
-      throw error;
-    }
-  },
-
-  bulkImportEmployees: async (employees: CreateEmployeeData[]) => {
-    try {
-      set({ isLoading: true, error: null });
-      const importedEmployees = await employeeService.bulkImportEmployees(employees);
-      
-      // Refresh the entire employee list
-      await get().fetchEmployees();
-      
-      // Refresh stats
-      get().fetchStats();
-      
-      return importedEmployees;
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to import employees';
-      console.error('Error importing employees:', error);
-      set({ error: errorMessage, isLoading: false });
-      throw error;
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch expiring visas' });
+      return [];
     }
   },
 
   fetchStats: async () => {
     try {
       const stats = await employeeService.getEmployeeStats();
-      set({ stats });
+      
+      // Calculate companies count from current employees
+      const { employees } = get();
+      const companiesCount = new Set(employees.map(emp => emp.company_name)).size;
+      
+      set({ 
+        stats: {
+          ...stats,
+          companiesCount
+        }
+      });
     } catch (error) {
-      console.error('Error fetching employee stats:', error);
-      // Don't throw here as stats are not critical
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch stats' });
     }
   },
 
-  clearError: () => {
-    set({ error: null });
-  },
+  clearError: () => set({ error: null }),
 
   getEmployeeByEmail: async (email: string) => {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('email_id', email)
-        .single();
-
-      if (error) {
-        console.error('Error fetching employee by email:', error);
-        return null;
-      }
-
-      return data;
+      const { employees } = get();
+      return employees.find(emp => emp.email_id === email) || null;
     } catch (error) {
-      console.error('Error in getEmployeeByEmail:', error);
+      set({ error: error instanceof Error ? error.message : 'Failed to find employee' });
       return null;
+    }
+  },
+
+  // NEW: Filter methods
+  fetchEmployeesByTrade: async (trade: string) => {
+    try {
+      return await employeeService.getEmployeesByTrade(trade);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch employees by trade' });
+      return [];
+    }
+  },
+
+  fetchEmployeesByCompanyName: async (companyName: string) => {
+    try {
+      return await employeeService.getEmployeesByCompanyName(companyName);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to fetch employees by company' });
+      return [];
+    }
+  },
+
+  fetchFilteredEmployees: async (filters) => {
+    try {
+      return await employeeService.getFilteredEmployees(filters);
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'Failed to filter employees' });
+      return [];
+    }
+  },
+
+  loadFilterOptions: async () => {
+    try {
+      const [trades, companies] = await Promise.all([
+        employeeService.getUniqueTrades(),
+        employeeService.getUniqueCompanies()
+      ]);
+      
+      set({ 
+        availableTrades: trades,
+        availableCompanies: companies 
+      });
+    } catch (error) {
+      console.error('Error loading filter options:', error);
+      set({ error: 'Failed to load filter options' });
     }
   },
 })); 

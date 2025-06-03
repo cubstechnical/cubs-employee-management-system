@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert, Dimensions, Animated, Image } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Dimensions, Animated, Image, Platform } from 'react-native';
 import { Text, TextInput, Button, Card, useTheme, Surface, IconButton } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -143,7 +143,18 @@ export default function SignupScreen() {
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="account" />}
-                  theme={{ colors: { primary: '#DC143C', outline: '#DC143C' } }}
+                  theme={{
+                    colors: {
+                      primary: '#DC143C',
+                      outline: '#DC143C',
+                      onSurfaceVariant: '#1F2937',
+                      onSurface: '#111827',
+                      surface: '#FFFFFF',
+                      background: '#FFFFFF',
+                    }
+                  }}
+                  textColor="#111827"
+                  placeholderTextColor="#6B7280"
                 />
 
                 <TextInput
@@ -155,7 +166,18 @@ export default function SignupScreen() {
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="email" />}
-                  theme={{ colors: { primary: '#DC143C', outline: '#DC143C' } }}
+                  theme={{
+                    colors: {
+                      primary: '#DC143C',
+                      outline: '#DC143C',
+                      onSurfaceVariant: '#1F2937',
+                      onSurface: '#111827',
+                      surface: '#FFFFFF',
+                      background: '#FFFFFF',
+                    }
+                  }}
+                  textColor="#111827"
+                  placeholderTextColor="#6B7280"
                 />
 
                 <TextInput
@@ -172,7 +194,18 @@ export default function SignupScreen() {
                       onPress={() => setShowPassword(!showPassword)}
                     />
                   }
-                  theme={{ colors: { primary: '#DC143C', outline: '#DC143C' } }}
+                  theme={{
+                    colors: {
+                      primary: '#DC143C',
+                      outline: '#DC143C',
+                      onSurfaceVariant: '#1F2937',
+                      onSurface: '#111827',
+                      surface: '#FFFFFF',
+                      background: '#FFFFFF',
+                    }
+                  }}
+                  textColor="#111827"
+                  placeholderTextColor="#6B7280"
                 />
 
                 <TextInput
@@ -189,7 +222,18 @@ export default function SignupScreen() {
                       onPress={() => setShowConfirmPassword(!showConfirmPassword)}
                     />
                   }
-                  theme={{ colors: { primary: '#DC143C', outline: '#DC143C' } }}
+                  theme={{
+                    colors: {
+                      primary: '#DC143C',
+                      outline: '#DC143C',
+                      onSurfaceVariant: '#1F2937',
+                      onSurface: '#111827',
+                      surface: '#FFFFFF',
+                      background: '#FFFFFF',
+                    }
+                  }}
+                  textColor="#111827"
+                  placeholderTextColor="#6B7280"
                 />
 
                 <Button
@@ -292,7 +336,19 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   input: {
-    backgroundColor: 'transparent',
+    backgroundColor: 'white',
+    marginBottom: Platform.select({
+      ios: 16,
+      android: 16,
+      web: 12,
+    }),
+    minHeight: Platform.select({
+      ios: 56,
+      android: 60,
+      web: 56,
+    }),
+    fontSize: 16,
+    lineHeight: 20,
   },
   signupButton: {
     backgroundColor: '#DC143C',
