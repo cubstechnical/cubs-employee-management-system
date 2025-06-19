@@ -17,7 +17,7 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${(num >> 16) & 255},${(num >> 8) & 255},${num & 255},${alpha})`;
 }
 
-export default function EmployeeDashboard() {
+function EmployeeDashboard() {
   const theme = useTheme() as CustomTheme;
   const { user, logout } = useAuth();
   const { employees } = useEmployees();
@@ -301,4 +301,9 @@ export default function EmployeeDashboard() {
     </SafeAreaView>
   );
 }
+
+export default withAuthGuard({
+  WrappedComponent: EmployeeDashboard,
+  allowedRoles: ['employee']
+});
 

@@ -9,7 +9,12 @@ import { safeThemeAccess } from '../../utils/errorPrevention';
 import { withAuthGuard } from '../../components/AuthGuard';
 import { useRouter } from 'expo-router';
 
-export default function UserApprovalsScreen() {
+export default withAuthGuard({
+  WrappedComponent: UserApprovalsScreen,
+  allowedRoles: ['admin']
+});
+
+function UserApprovalsScreen() {
   const theme = useTheme() as CustomTheme;
   const styles = StyleSheet.create({
     container: {
@@ -163,22 +168,6 @@ export default function UserApprovalsScreen() {
       minute: '2-digit',
     });
   };
-
-  // Only allow admins to access this screen
-  if (user?.role !== 'admin') {
-    return (
-      <AdminLayout title="Access Denied" currentRoute="/admin/approvals">
-        <View style={styles.errorContainer}>
-          <Text variant="headlineSmall" style={{ color: safeThemeAccess.colors(theme, 'error') }}>
-            Access Denied
-          </Text>
-          <Text variant="bodyMedium" style={{ marginVertical: safeThemeAccess.spacing(theme, 'md') }}>
-            You must be an admin to access this screen.
-          </Text>
-        </View>
-      </AdminLayout>
-    );
-  }
 
   return (
     <AdminLayout 

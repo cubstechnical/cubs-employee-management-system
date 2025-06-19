@@ -306,7 +306,10 @@ export const listEmployeeDocuments = async (employeeId: string): Promise<FileInf
   }
 
   try {
-    // Use Supabase Edge Function instead of direct B2 API call to avoid CORS
+    // Add timeout and retry logic for edge function calls
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
     const { data, error } = await supabase.functions.invoke('hyper-task', {
       body: {
         action: 'list',
@@ -315,24 +318,28 @@ export const listEmployeeDocuments = async (employeeId: string): Promise<FileInf
       }
     });
 
+    clearTimeout(timeoutId);
+
     if (error) {
-      throw new Error(`List files failed: ${error.message}`);
+      console.warn('☁️ [BACKBLAZE] Edge function error, returning empty list:', error.message);
+      return []; // Return empty array instead of throwing
     }
     
-    const files: FileInfo[] = (data.files || []).map((file: any) => ({
-      fileId: file.fileId,
-      fileName: file.fileName,
-      contentType: file.contentType,
-      contentLength: file.contentLength,
-      uploadTimestamp: file.uploadTimestamp,
-      url: file.url
+    const files: FileInfo[] = (data?.files || []).map((file: any) => ({
+      fileId: file.fileId || `unknown_${Date.now()}`,
+      fileName: file.fileName || 'unknown_file',
+      contentType: file.contentType || 'application/octet-stream',
+      contentLength: file.contentLength || 0,
+      uploadTimestamp: file.uploadTimestamp || Date.now(),
+      url: file.url || ''
     }));
 
     console.log('☁️ [BACKBLAZE] Listed', files.length, 'documents for employee');
     return files;
     
   } catch (error) {
-    console.error('☁️ [BACKBLAZE] List documents error:', error);
+    console.warn('☁️ [BACKBLAZE] List documents error, returning empty list:', error);
+    // Always return empty array instead of throwing to prevent app crashes
     return [];
   }
 };

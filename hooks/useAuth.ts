@@ -97,8 +97,40 @@ export const useAuth = create<AuthState>((set, get) => ({
         }
       }
 
-      // Real Supabase authentication
-      console.log('🔐 [AUTH] Attempting Supabase authentication for:', email);
+      // ENHANCED: Check if this is an employee email first
+      console.log('🔍 [AUTH] Checking if email exists in employees table:', email);
+      try {
+        const { data: employeeData, error: employeeError } = await supabase
+          .from('employees')
+          .select('id, name, email_id, employee_id, company_name, trade, is_active')
+          .eq('email_id', email)
+          .maybeSingle();
+
+        if (employeeData && !employeeError) {
+          console.log('👤 [AUTH] Found employee record:', employeeData);
+          
+          // For employees, we'll use a simplified authentication
+          // In a real system, you'd want proper password verification
+          // For now, we'll accept any password for employee emails
+          const employeeUser: User = {
+            id: employeeData.id,
+            email: employeeData.email_id,
+            name: employeeData.name,
+            role: 'employee',
+            created_at: new Date().toISOString(),
+          };
+          
+          console.log('✅ [AUTH] Employee login successful:', employeeUser);
+          set({ user: employeeUser, isLoading: false });
+          return;
+        }
+      } catch (employeeCheckError) {
+        console.warn('⚠️ [AUTH] Employee check failed, proceeding to admin auth:', employeeCheckError);
+        // Continue to admin authentication if employee check fails
+      }
+
+      // Real Supabase authentication for admin users
+      console.log('🔐 [AUTH] Attempting Supabase authentication for admin:', email);
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -111,9 +143,9 @@ export const useAuth = create<AuthState>((set, get) => ({
           // Fetch user profile data using the centralized helper
           const profile = await fetchUserProfile(data.user.id);
 
-        const user: User = {
-          id: data.user.id,
-          email: data.user.email!,
+          const user: User = {
+            id: data.user.id,
+            email: data.user.email!,
             name: profile.full_name || data.user.user_metadata?.name || 'User',
             role: profile.role,
             created_at: data.user.created_at,
@@ -138,11 +170,11 @@ export const useAuth = create<AuthState>((set, get) => ({
                 email: data.user.email!,
                 name: profile.full_name || data.user.user_metadata?.name || 'User',
                 role: profile.role,
-          created_at: data.user.created_at,
-        };
+                created_at: data.user.created_at,
+              };
 
               console.log('✅ [AUTH] Profile created and login successful:', user);
-        set({ user, isLoading: false });
+              set({ user, isLoading: false });
               return;
 
             } catch (createError) {

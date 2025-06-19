@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, ScrollView, BackHandler, Animated, Platform } from 'react-native';
+import { View, StyleSheet, Dimensions, ScrollView, BackHandler, Animated, Platform, Image } from 'react-native';
 import {
   Appbar,
   Drawer,
@@ -25,6 +25,28 @@ import SecuritySettings from './SecuritySettings';
 
 const { width } = Dimensions.get('window');
 const SIDEBAR_WIDTH = 320;
+
+// ENHANCED: Logo import with multiple fallback options - REMOVED
+// const getLogo = () => {
+//   try {
+//     // Try primary logo first
+//     return require('../assets/logo.png');
+//   } catch (error) {
+//     try {
+//       // Try alternative logos
+//       return require('../assets/logo2.png');
+//     } catch (error2) {
+//       try {
+//         return require('../assets/logo123.png');
+//       } catch (error3) {
+//         console.warn('No logo images found in AdminLayout, using text fallback');
+//         return null;
+//       }
+//     }
+//   }
+// };
+
+// const logoImage = getLogo();
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -219,13 +241,17 @@ export default function AdminLayout({
                 ]} 
                 elevation={isMobile ? 5 : 0}
               >
-                {/* Enhanced Sidebar Header */}
-                <Surface style={[styles.sidebarHeader, { backgroundColor: safeThemeAccess.colors(theme, 'primary') }]} elevation={4}>
+                {/* Enhanced Sidebar Header - Compact for Mobile */}
+                <Surface style={[styles.sidebarHeader, { 
+                  backgroundColor: safeThemeAccess.colors(theme, 'primary'),
+                  minHeight: isMobile ? 60 : 80,
+                  padding: isMobile ? 12 : 20,
+                }]} elevation={4}>
                   <View style={styles.headerContainer}>
                     {isMobile && (
                       <IconButton
                         icon="close"
-                        size={24}
+                        size={18}
                         onPress={() => setSidebarVisible(false)}
                         iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
                         style={styles.closeButton}
@@ -233,33 +259,57 @@ export default function AdminLayout({
                     )}
                     
                     <View style={styles.brandingContainer}>
-                      <View style={[styles.logoContainer, { backgroundColor: safeThemeAccess.colors(theme, 'onPrimary') }]}>
-                        <View style={styles.logoWrapper}>
-                          <Text style={[styles.logoText, { color: safeThemeAccess.colors(theme, 'primary') }]}>CUBS</Text>
-                          <View style={[styles.logoAccent, { backgroundColor: safeThemeAccess.colors(theme, 'primary') }]} />
-                        </View>
-                      </View>
-                      <Text variant="titleLarge" style={[styles.brandTitle, { color: safeThemeAccess.colors(theme, 'onPrimary') }]}>
+                      <Text variant={isMobile ? "titleMedium" : "headlineSmall"} style={[styles.brandTitle, { 
+                        color: safeThemeAccess.colors(theme, 'onPrimary'),
+                        textAlign: 'center',
+                        fontWeight: 'bold',
+                        marginBottom: isMobile ? 4 : 8,
+                        flexWrap: 'wrap',
+                        maxWidth: '100%',
+                        fontSize: isMobile ? 16 : 20,
+                        lineHeight: isMobile ? 18 : 24,
+                      }]} numberOfLines={isMobile ? 1 : 1}>
                         CUBS Technical
                       </Text>
-                      <Text variant="bodyMedium" style={[styles.brandSubtitle, { color: safeThemeAccess.colors(theme, 'onPrimary') }]}>
-                        Employee Management System
+                      <Text variant={isMobile ? "bodySmall" : "titleSmall"} style={[styles.brandSubtitle, { 
+                        color: safeThemeAccess.colors(theme, 'onPrimary'),
+                        textAlign: 'center',
+                        opacity: 0.9,
+                        marginBottom: isMobile ? 8 : 12,
+                        flexWrap: 'wrap',
+                        maxWidth: '100%',
+                        fontSize: isMobile ? 12 : 14,
+                        lineHeight: isMobile ? 14 : 16,
+                      }]} numberOfLines={isMobile ? 1 : 1}>
+                        Employee Management
                       </Text>
                       
-                      {/* User Info */}
-                      <View style={styles.userInfo}>
+                      {/* Enhanced User Info - Compact for Mobile */}
+                      <View style={[styles.userInfo, {
+                        paddingHorizontal: isMobile ? 8 : 12,
+                        paddingVertical: isMobile ? 6 : 8,
+                      }]}>
                         <Avatar.Text 
-                          size={32} 
+                          size={isMobile ? 28 : 32} 
                           label={user?.name?.charAt(0) || 'A'} 
                           style={[styles.userAvatar, { backgroundColor: safeThemeAccess.colors(theme, 'onPrimary') }]}
-                          labelStyle={{ color: safeThemeAccess.colors(theme, 'primary'), fontSize: 14 }}
+                          labelStyle={{ color: safeThemeAccess.colors(theme, 'primary'), fontSize: isMobile ? 12 : 14, fontWeight: 'bold' }}
                         />
                         <View style={styles.userDetails}>
-                          <Text variant="bodyMedium" style={[styles.userName, { color: safeThemeAccess.colors(theme, 'onPrimary') }]}>
+                          <Text variant={isMobile ? "bodyMedium" : "titleSmall"} style={[styles.userName, { 
+                            color: safeThemeAccess.colors(theme, 'onPrimary'),
+                            flexWrap: 'wrap',
+                            maxWidth: isMobile ? 120 : 150,
+                          }]} numberOfLines={1}>
                             {user?.name || 'Administrator'}
                           </Text>
-                          <Text variant="bodySmall" style={[styles.userRole, { color: safeThemeAccess.colors(theme, 'onPrimary') }]}>
-                            {user?.role === 'admin' ? '👑 Admin' : '👤 User'}
+                          <Text variant="bodySmall" style={[styles.userRole, { 
+                            color: safeThemeAccess.colors(theme, 'onPrimary'),
+                            fontSize: isMobile ? 10 : 12,
+                            flexWrap: 'wrap',
+                            maxWidth: isMobile ? 120 : 150,
+                          }]} numberOfLines={1}>
+                            {user?.role === 'admin' ? '👑 Admin Access' : '👤 User Access'}
                           </Text>
                         </View>
                       </View>
@@ -286,50 +336,25 @@ export default function AdminLayout({
                               backgroundColor: safeThemeAccess.colors(theme, 'primaryContainer'),
                               marginHorizontal: 12,
                               borderRadius: 12,
+                              borderLeftWidth: 4,
+                              borderLeftColor: safeThemeAccess.colors(theme, 'primary'),
                             }
                           ]}
                         />
                         {item.badge && (
                           <Badge 
-                            style={[styles.badge, { backgroundColor: safeThemeAccess.colors(theme, 'error') }]}
-                            size={20}
+                            style={[styles.badge, { 
+                              backgroundColor: safeThemeAccess.colors(theme, 'error'),
+                              borderColor: safeThemeAccess.colors(theme, 'surface'),
+                              borderWidth: 2,
+                            }]}
+                            size={22}
                           >
                             {item.badge}
                           </Badge>
                         )}
                       </View>
                     ))}
-                  </View>
-
-                  <Divider style={[styles.divider, { backgroundColor: safeThemeAccess.colors(theme, 'outline') }]} />
-                  
-                  {/* Quick Actions */}
-                  <View style={styles.quickActionsSection}>
-                    <Text variant="labelLarge" style={[styles.sectionLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
-                      QUICK ACTIONS
-                    </Text>
-                    
-                    <Button
-                      mode="contained"
-                      onPress={() => handleNavigation('/(admin)/employees')}
-                      style={[styles.quickActionButton, { backgroundColor: safeThemeAccess.colors(theme, 'primary') }]}
-                      contentStyle={styles.quickActionContent}
-                      icon="plus"
-                      labelStyle={{ color: safeThemeAccess.colors(theme, 'onPrimary'), fontWeight: 'bold' }}
-                    >
-                      Add Employee
-                    </Button>
-                    
-                    <Button
-                      mode="outlined"
-                      onPress={() => handleNavigation('/(admin)/notifications')}
-                      style={[styles.quickActionButton, { borderColor: safeThemeAccess.colors(theme, 'primary') }]}
-                      contentStyle={styles.quickActionContent}
-                      icon="email-send"
-                      labelStyle={{ color: safeThemeAccess.colors(theme, 'primary'), fontWeight: 'bold' }}
-                    >
-                      Send Notifications
-                    </Button>
                   </View>
 
                   <Divider style={[styles.divider, { backgroundColor: safeThemeAccess.colors(theme, 'outline') }]} />
@@ -351,7 +376,15 @@ export default function AdminLayout({
                         <Text variant="bodyMedium" style={[styles.settingText, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
                           {isDarkMode ? 'Dark Mode' : 'Light Mode'}
                         </Text>
-                        <Switch value={isDarkMode} onValueChange={toggleTheme} />
+                        <Switch 
+                          value={isDarkMode} 
+                          onValueChange={toggleTheme}
+                          thumbColor={isDarkMode ? safeThemeAccess.colors(theme, 'primary') : undefined}
+                          trackColor={{ 
+                            false: safeThemeAccess.colors(theme, 'outline'), 
+                            true: safeThemeAccess.colors(theme, 'primaryContainer') 
+                          }}
+                        />
                       </View>
                     </View>
 
@@ -375,7 +408,7 @@ export default function AdminLayout({
                       </View>
                     </View>
                     
-                    {/* Logout Button */}
+                    {/* Enhanced Logout Button */}
                     <Button 
                       mode="contained" 
                       onPress={handleLogout}
@@ -384,7 +417,7 @@ export default function AdminLayout({
                       icon="logout"
                       labelStyle={{ color: safeThemeAccess.colors(theme, 'onError'), fontWeight: 'bold' }}
                     >
-                      Sign Out
+                      Sign Out Securely
                     </Button>
                   </View>
                 </ScrollView>
@@ -400,50 +433,116 @@ export default function AdminLayout({
             !isMobile && sidebarVisible && { marginLeft: SIDEBAR_WIDTH },
           ]}
         >
-          {/* Enhanced Header with Back Button */}
-          <Surface style={[styles.header, { backgroundColor: safeThemeAccess.colors(theme, 'primary') }]} elevation={4}>
-            <View style={styles.headerContent}>
+          {/* Enhanced Header with Back Button - Compact for Mobile */}
+          <Surface style={[styles.header, { 
+            backgroundColor: safeThemeAccess.colors(theme, 'primary'),
+            minHeight: isMobile ? 44 : 56,
+            paddingVertical: isMobile ? 2 : 6,
+            paddingHorizontal: isMobile ? 2 : 6,
+          }]} elevation={4}>
+            <View style={[styles.headerContent, {
+              minHeight: isMobile ? 36 : 48,
+              paddingHorizontal: isMobile ? 6 : 10,
+            }]}>
               <View style={styles.headerLeft}>
                 {showBackButton ? (
                   <IconButton
                     icon="arrow-left"
-                    size={24}
+                    size={isMobile ? 18 : 22}
                     onPress={handleBackPress}
                     iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
+                    style={{ margin: 0 }}
                   />
                 ) : (
                   <IconButton
                     icon={sidebarVisible ? "menu-open" : "menu"}
-                    size={24}
+                    size={isMobile ? 18 : 22}
                     onPress={toggleSidebar}
                     iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
+                    style={{ margin: 0 }}
                   />
                 )}
-                <Text variant="headlineSmall" style={[styles.headerTitle, { color: safeThemeAccess.colors(theme, 'onPrimary') }]}>
+                <Text variant={isMobile ? "titleMedium" : "headlineSmall"} style={[styles.headerTitle, { 
+                  color: safeThemeAccess.colors(theme, 'onPrimary'),
+                  fontSize: isMobile ? 14 : 18,
+                  fontWeight: 'bold',
+                  marginLeft: isMobile ? 6 : 10,
+                  flex: 1,
+                  flexWrap: 'wrap',
+                  textAlign: 'left',
+                  maxWidth: isMobile ? '75%' : '80%',
+                  lineHeight: isMobile ? 16 : 20,
+                }]} numberOfLines={isMobile ? 1 : 1}>
                   {title}
                 </Text>
               </View>
-              
+
               <View style={styles.headerRight}>
-                <IconButton
-                  icon="bell"
-                  size={24}
-                  onPress={() => handleNavigation('/(admin)/notifications')}
-                  iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
-                />
-                <IconButton
-                  icon="account-circle"
-                  size={24}
-                  onPress={() => setSettingsVisible(true)}
-                  iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
-                />
-                <IconButton
-                  icon="logout"
-                  size={24}
-                  onPress={handleLogout}
-                  iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
-                  style={[styles.logoutHeaderButton, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
-                />
+                {/* User Info - Ultra Compact on Mobile */}
+                <View style={styles.userInfoCompact}>
+                  <Avatar.Text 
+                    size={isMobile ? 24 : 32} 
+                    label={user?.name?.charAt(0) || 'U'} 
+                    style={[styles.userAvatar, { 
+                      backgroundColor: 'rgba(255,255,255,0.2)',
+                      marginRight: isMobile ? 4 : 8,
+                    }]}
+                    labelStyle={{ 
+                      color: safeThemeAccess.colors(theme, 'onPrimary'),
+                      fontSize: isMobile ? 10 : 14,
+                      fontWeight: 'bold',
+                    }}
+                  />
+                  {!isMobile && (
+                    <View style={styles.userDetails}>
+                      <Text variant="bodySmall" style={[styles.userName, { 
+                        color: safeThemeAccess.colors(theme, 'onPrimary'),
+                        fontSize: 12,
+                        fontWeight: 'bold',
+                      }]} numberOfLines={1}>
+                        {user?.name}
+                      </Text>
+                      <Text variant="bodySmall" style={[styles.userRole, { 
+                        color: safeThemeAccess.colors(theme, 'onPrimary'),
+                        fontSize: 10,
+                        opacity: 0.8,
+                      }]} numberOfLines={1}>
+                        {user?.role}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={[styles.headerRight, {
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: isMobile ? 4 : 8,
+                }]}>
+                  <IconButton
+                    icon="bell"
+                    size={isMobile ? 18 : 24}
+                    onPress={() => handleNavigation('/(admin)/notifications')}
+                    iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
+                    style={{ margin: 0 }}
+                  />
+                  <IconButton
+                    icon="account-circle"
+                    size={isMobile ? 18 : 24}
+                    onPress={() => setSettingsVisible(true)}
+                    iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
+                    style={{ margin: 0 }}
+                  />
+                  <IconButton
+                    icon="logout"
+                    size={isMobile ? 18 : 24}
+                    onPress={handleLogout}
+                    iconColor={safeThemeAccess.colors(theme, 'onPrimary')}
+                    style={[styles.logoutHeaderButton, { 
+                      backgroundColor: 'rgba(255,255,255,0.15)',
+                      margin: 0,
+                    }]}
+                  />
+                </View>
               </View>
             </View>
           </Surface>
@@ -606,39 +705,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
-  logoContainer: {
-    width: 64,
-    height: 64,
-    backgroundColor: 'white',
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 4,
-      },
-      web: {
-        boxShadow: '0px 2px 4px rgba(0,0,0,0.1)',
-      }
-    })
-  },
   logoWrapper: {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoAccent: {
-    width: 24,
-    height: 3,
-    borderRadius: 2,
-    marginTop: 4,
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 6,
   },
   logoText: {
     fontSize: 22,
@@ -698,6 +773,9 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     marginHorizontal: 8,
   },
+  drawerItemLabel: {
+    fontWeight: '500',
+  },
   badge: {
     position: 'absolute',
     top: 12,
@@ -715,11 +793,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   quickActionButton: {
-    marginBottom: 12,
-    borderRadius: 12,
+    marginBottom: 8,
+    borderRadius: 8,
+    height: 36,
   },
   quickActionContent: {
-    paddingVertical: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickActionLabel: {
+    fontWeight: 'bold',
+    fontSize: 12,
+    letterSpacing: 0.3,
+    textAlign: 'center',
   },
   settingsSection: {
     paddingHorizontal: 20,
@@ -770,15 +859,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  headerTitle: {
-    marginLeft: 8,
-    fontWeight: 'bold',
-    flex: 1,
-    fontSize: width <= 768 ? 18 : 20,
-  },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerTitle: {
+    fontWeight: 'bold',
   },
   pageContent: {
     flex: 1,
@@ -839,5 +925,20 @@ const styles = StyleSheet.create({
   sidebarSurface: {
     flex: 1,
     borderRadius: 0,
+  },
+  logoFallback: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoAccent: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  userInfoCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 }); 

@@ -23,7 +23,7 @@ import { safeThemeAccess } from '../../utils/errorPrevention';
 
 const { width } = Dimensions.get('window');
 
-export default function EmployeeProfileScreen() {
+function EmployeeProfileScreen() {
   const theme = useTheme() as CustomTheme;
   const { user } = useAuth();
   const { employees, fetchEmployees } = useEmployees();
@@ -500,4 +500,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 4,
   },
+});
+
+export default withAuthGuard({
+  WrappedComponent: EmployeeProfileScreen,
+  allowedRoles: ['employee']
 }); 

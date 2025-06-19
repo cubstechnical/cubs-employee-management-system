@@ -1,7 +1,8 @@
 import React from 'react';
 import { Stack } from 'expo-router';
+import { withAuthGuard } from '../../components/AuthGuard';
 
-export default function EmployeeLayout() {
+function EmployeeLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="dashboard" />
@@ -10,4 +11,9 @@ export default function EmployeeLayout() {
       <Stack.Screen name="notifications" />
     </Stack>
   );
-} 
+}
+
+export default withAuthGuard({
+  WrappedComponent: EmployeeLayout,
+  allowedRoles: ['employee']
+}); 

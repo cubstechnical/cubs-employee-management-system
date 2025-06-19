@@ -43,5 +43,10 @@ export const COMPANIES = [
     id: 8,
     name: 'AL MACEN TRADING & CONTRACTING W.L.L.',
     location: 'QATAR'
+  },
+  {
+    id: 10,
+    name: 'Temporary Worker',
+    location: 'N/A'
   }
 ] as const; 

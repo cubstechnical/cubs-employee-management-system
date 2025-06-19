@@ -4,8 +4,9 @@ import { Text, useTheme } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CustomTheme } from '../../theme';
 import { safeThemeAccess } from '../../utils/errorPrevention';
+import { withAuthGuard } from '../../components/AuthGuard';
 
-export default function EmployeeNotificationsScreen() {
+function EmployeeNotificationsScreen() {
   const theme = useTheme() as CustomTheme;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: safeThemeAccess.colors(theme, 'background') }}>
@@ -17,5 +18,10 @@ export default function EmployeeNotificationsScreen() {
       </View>
     </SafeAreaView>
   );
-} 
+}
+
+export default withAuthGuard({
+  WrappedComponent: EmployeeNotificationsScreen,
+  allowedRoles: ['employee']
+}); 
 
