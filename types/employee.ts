@@ -13,7 +13,7 @@ export interface Employee {
   join_date: string;
   visa_expiry_date: string;
   visa_status: string;
-  passport_number: string;
+  passport_no: string;
   status: string;
   is_active: boolean;
   created_at?: string;
@@ -32,7 +32,7 @@ export interface EmployeeFormData {
   company_name: string;
   join_date: string;
   visa_expiry_date: string;
-  passport_number: string;
+  passport_no: string;
 }
 
 export interface EmployeeDocument {

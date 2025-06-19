@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, RefreshControl, TouchableOpacity, Platform, Animated, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Dimensions, RefreshControl, TouchableOpacity, Platform, Animated, Alert, Switch } from 'react-native';
 import {
   Text,
   Card,
@@ -19,8 +19,9 @@ import {
   DataTable,
   List,
   SegmentedButtons,
-  Snackbar,
+  Snackbar
 } from 'react-native-paper';
+import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
 import { useEmployees } from '../../hooks/useEmployees';
 import AdminLayout from '../../components/AdminLayout';
@@ -50,14 +51,30 @@ const VISA_STATUS_OPTIONS = [
   { value: 'EXPIRY', label: 'Expiring Soon', color: '#F59E0B' }
 ];
 
+const CONSISTENT_COLORS = {
+  primary: '#2563EB', // Professional Blue
+  secondary: '#3182CE',
+  tertiary: '#8B5CF6',
+  success: '#22C55E',
+  warning: '#F59E0B',
+  error: '#DC2626',
+  info: '#3B82F6',
+  purple: '#8B5CF6',
+  professional: '#2563EB',
+  teal: '#14B8A6',
+  gray: '#6B7280',
+  expired: '#DC2626',
+  expiring: '#F59E0B',
+  active: '#22C55E',
+};
+
 export default function EmployeesScreen() {
   const theme = useTheme() as CustomTheme;
   const { employees, isLoading, refreshEmployees, addEmployee, updateEmployee, deleteEmployee } = useEmployees();
   
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'join_date' | 'visa_expiry'>('name');
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -78,23 +95,18 @@ export default function EmployeesScreen() {
   const [pressedRow, setPressedRow] = useState<string | null>(null);
   const [hoveredRow, setHoveredRow] = useState<string | null>(null);
 
-  // Enhanced color constants for consistency - Professional Blue Theme (avoiding red conflicts)
-  const CONSISTENT_COLORS = {
-    primary: '#2563EB', // Professional Blue instead of Ferrari Red
-    secondary: '#3182CE', // Professional Blue
-    tertiary: '#8B5CF6', // Purple
-    success: '#22C55E', // Green
-    warning: '#F59E0B', // Amber
-    error: '#DC2626', // Error Red (only for actual errors)
-    info: '#3B82F6', // Blue
-    purple: '#8B5CF6', // Purple
-    professional: '#2563EB', // Professional Blue - primary brand color
-    teal: '#14B8A6', // Teal
-    gray: '#6B7280', // Gray
-    expired: '#DC2626', // Red for expired visas
-    expiring: '#F59E0B', // Amber for expiring visas
-    active: '#22C55E', // Green for active visas
-  };
+  // Filter states
+  const [filterCompany, setFilterCompany] = useState<string>('all');
+  const [filterTrade, setFilterTrade] = useState<string>('all');
+  const [filterVisaStatus, setFilterVisaStatus] = useState<string>('all');
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // 3. Extract unique trades from employees
+  const allTrades = Array.from(new Set(employees.map(emp => emp.trade).filter(Boolean)));
+  const allVisaStatuses = ['ACTIVE', 'EXPIRING', 'EXPIRED'];
 
   // Form state
   const [newEmployee, setNewEmployee] = useState({
@@ -114,6 +126,9 @@ export default function EmployeesScreen() {
 
   // UI state
   const [companyMenuVisible, setCompanyMenuVisible] = useState(false);
+
+  // 1. Add a state for display mode
+  const [displayMode, setDisplayMode] = useState<'view' | 'editor'>('view');
 
   useEffect(() => {
     // Entry animations
@@ -198,32 +213,30 @@ export default function EmployeesScreen() {
     }
   };
 
+  // 4. Update filteredEmployees logic to include new filters
   const filteredEmployees = employees?.filter(employee => {
-    const matchesSearch = 
+    const matchesSearch =
       (employee.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (employee.trade || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (employee.company_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (employee.email_id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (employee.employee_id || '').toLowerCase().includes(searchQuery.toLowerCase());
+      (employee.employee_id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (employee.passport_no || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesFilter = 
-      filterStatus === 'all' || 
-      (filterStatus === 'active' && employee.is_active) ||
-      (filterStatus === 'inactive' && !employee.is_active);
+    const matchesCompany = filterCompany === 'all' || employee.company_name === filterCompany;
+    const matchesTrade = filterTrade === 'all' || employee.trade === filterTrade;
+    const matchesVisaStatus = filterVisaStatus === 'all' || (employee.visa_status || '').toUpperCase() === filterVisaStatus;
 
-    return matchesSearch && matchesFilter;
-  }).sort((a, b) => {
-    switch (sortBy) {
-      case 'name':
-        return (a.name || '').localeCompare(b.name || '');
-      case 'join_date':
-        return new Date(b.join_date || '').getTime() - new Date(a.join_date || '').getTime();
-      case 'visa_expiry':
-        return new Date(a.visa_expiry_date || '').getTime() - new Date(b.visa_expiry_date || '').getTime();
-      default:
-        return 0;
-    }
+    return matchesSearch && matchesCompany && matchesTrade && matchesVisaStatus;
+  })?.sort((a, b) => {
+    // Sort by employee name alphabetically
+    const nameA = (a.name || '').toLowerCase();
+    const nameB = (b.name || '').toLowerCase();
+    return nameA.localeCompare(nameB);
   }) || [];
+
+  // 5. Pagination logic
+  const totalPages = Math.ceil(filteredEmployees.length / pageSize);
+  const paginatedEmployees = filteredEmployees.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Success animation function
   const triggerSuccessAnimation = () => {
@@ -385,7 +398,7 @@ export default function EmployeesScreen() {
       setSelectedEmployees([]);
       setShowBulkActions(false);
     } else {
-      const allIds = filteredEmployees.map(emp => emp.id);
+      const allIds = filteredEmployees.map(emp => emp.employee_id).filter(Boolean) as string[];
       setSelectedEmployees(allIds);
       setShowBulkActions(true);
     }
@@ -437,7 +450,7 @@ export default function EmployeesScreen() {
 
       // Get selected employee objects
       const selectedEmployeeObjects = employees?.filter(emp => 
-        selectedEmployees.includes(emp.id)
+        selectedEmployees.includes(emp.employee_id)
       ) || [];
 
       if (selectedEmployeeObjects.length === 0) {
@@ -550,324 +563,270 @@ export default function EmployeesScreen() {
     router.push(`/(admin)/documents?employeeId=${employeeId}`);
   };
 
-  // Dramatically improved table view with full height and better styling
-  const renderTableView = () => (
-    <View style={styles.fullHeightTableContainer}>
-    <Surface style={[styles.modernTableContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
-        {/* Table Header with Actions */}
-      <View style={styles.tableHeader}>
-        <Text variant="titleLarge" style={[styles.tableTitle, { color: CONSISTENT_COLORS.primary }]}>
-          📊 Employee Database ({filteredEmployees.length} employees)
-        </Text>
-        
-        {/* Bulk Actions Bar */}
-        {showBulkActions && (
-          <Surface style={[styles.bulkActionsBar, { backgroundColor: CONSISTENT_COLORS.primary + '10' }]} elevation={2}>
-            <Text variant="bodyMedium" style={{ color: CONSISTENT_COLORS.primary, fontWeight: 'bold' }}>
-              {selectedEmployees.length} employee(s) selected
-            </Text>
-            <View style={styles.bulkActions}>
-                <Button
-                  mode="contained"
-                  onPress={handleBulkSendVisaReminder}
-                  style={[styles.bulkActionButton, { backgroundColor: CONSISTENT_COLORS.info, marginRight: 8 }]}
-                  labelStyle={{ color: 'white', fontSize: 12 }}
-                  icon="email-fast"
-                  compact
-                >
-                  Send Reminder
-                </Button>
-              <Button
-                mode="contained"
-                onPress={handleBulkDelete}
-                style={[styles.bulkActionButton, { backgroundColor: CONSISTENT_COLORS.error }]}
-                labelStyle={{ color: 'white', fontSize: 12 }}
-                icon="delete"
-                compact
-              >
-                Delete Selected
-              </Button>
-              <Button
-                mode="outlined"
-                onPress={() => {
-                  setSelectedEmployees([]);
-                  setShowBulkActions(false);
-                }}
-                style={[styles.bulkActionButton, { borderColor: CONSISTENT_COLORS.gray }]}
-                labelStyle={{ color: CONSISTENT_COLORS.gray, fontSize: 12 }}
-                compact
-              >
-                Cancel
-              </Button>
-            </View>
-          </Surface>
-        )}
-      </View>
-      
-        {/* Scrollable Table Content */}
-        <ScrollView 
-          style={styles.tableScrollView}
-          showsVerticalScrollIndicator={true}
-          bounces={true}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={handleRefresh}
-              colors={[CONSISTENT_COLORS.primary]}
-              tintColor={CONSISTENT_COLORS.primary}
-            />
+  // Completely redesign renderTableView with modern UI/UX
+  const renderTableView = () => {
+    // Show all filtered employees without pagination
+    const displayEmployees = filteredEmployees;
+
+    const renderStatusChip = (status: string, type: 'visa' | 'employee') => {
+      const getStatusConfig = () => {
+        if (type === 'visa') {
+          switch (status?.toLowerCase()) {
+            case 'active': return { color: '#10B981', bg: '#D1FAE5', text: 'Active' };
+            case 'expiring': return { color: '#F59E0B', bg: '#FEF3C7', text: 'Expiry Soon' };
+            case 'expired': return { color: '#EF4444', bg: '#FEE2E2', text: 'Expired' };
+            default: return { color: '#6B7280', bg: '#F3F4F6', text: 'Unknown' };
           }
-        >
-        {/* Modern Table Header */}
-        <View style={[styles.modernTableHeader, { backgroundColor: CONSISTENT_COLORS.primary + '15' }]}>
-          <View style={[styles.tableCell, styles.selectColumn]}>
-            <IconButton
-              icon={selectedEmployees.length === filteredEmployees.length ? 'checkbox-marked' : 'checkbox-blank-outline'}
-              size={20}
-              iconColor={CONSISTENT_COLORS.primary}
-              onPress={handleSelectAllEmployees}
-            />
+        } else {
+          return status === 'active' 
+            ? { color: '#10B981', bg: '#D1FAE5', text: 'Active' }
+            : { color: '#6B7280', bg: '#F3F4F6', text: 'Inactive' };
+        }
+      };
+
+      const config = getStatusConfig();
+      return (
+        <View style={[styles.statusChip, { backgroundColor: config.bg }]}>
+          <Text style={[styles.statusChipText, { color: config.color }]}>
+            {config.text}
+          </Text>
+        </View>
+      );
+    };
+
+    return (
+      <View style={styles.tableContainer}>
+        {/* Clean Header Section */}
+        <View style={styles.tableHeader}>
+          <View style={styles.headerLeft}>
+            <View style={styles.titleContainer}>
+              <Text style={styles.pageTitle}>Employee List</Text>
+              <Text style={styles.employeeCount}>({displayEmployees.length} employees)</Text>
+            </View>
+            <View style={styles.headerControls}>
+              <View style={styles.entriesControl}>
+                <Text style={styles.entriesLabel}>Rows Per Page</Text>
+                <TouchableOpacity
+                  style={styles.entriesDropdown}
+                  onPress={() => {
+                    // Cycle through page size options
+                    const pageSizeOptions = [10, 25, 50];
+                    const currentIndex = pageSizeOptions.indexOf(pageSize);
+                    const nextIndex = (currentIndex + 1) % pageSizeOptions.length;
+                    const newPageSize = pageSizeOptions[nextIndex];
+                    setCurrentPage(1); // Reset to first page when changing page size
+                    // Update pageSize through a new state variable
+                    setPageSize(newPageSize);
+                  }}
+                >
+                  <Text style={styles.entriesDropdownText}>{pageSize}</Text>
+                  <Text style={styles.entriesDropdownArrow}>▼</Text>
+                </TouchableOpacity>
+                <Text style={styles.entriesText}>Entries</Text>
+              </View>
+            </View>
           </View>
-          <View style={[styles.tableCell, styles.employeeColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>👤 Employee</Text>
-          </View>
-          <View style={[styles.tableCell, styles.companyColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>🏢 Company</Text>
-          </View>
-          <View style={[styles.tableCell, styles.compactColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>💼 Role</Text>
-          </View>
-          <View style={[styles.tableCell, styles.compactColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>📞 Contact</Text>
-          </View>
-          <View style={[styles.tableCell, styles.compactColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>🛂 Visa Status</Text>
-          </View>
-          <View style={[styles.tableCell, styles.actionsColumn]}>
-            <Text style={[styles.headerText, { color: CONSISTENT_COLORS.primary }]}>⚡ Actions</Text>
+          
+          <View style={styles.headerRight}>
+            <View style={styles.filterControls}>
+              {/* Company Filter Dropdown */}
+              <TouchableOpacity
+                style={styles.filterDropdown}
+                onPress={() => {
+                  // Simple cycling through company options
+                  const companyOptions = ['all', ...Array.from(new Set(employees.map(emp => emp.company_name).filter(Boolean))).sort()];
+                  const currentIndex = companyOptions.indexOf(filterCompany);
+                  const nextIndex = (currentIndex + 1) % companyOptions.length;
+                  setFilterCompany(companyOptions[nextIndex]);
+                }}
+              >
+                <Text style={styles.filterDropdownText} numberOfLines={1}>
+                  {filterCompany === 'all' ? 'All Companies' : filterCompany}
+                </Text>
+                <Text style={styles.filterDropdownArrow}>▼</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        {/* Modern Table Rows with Enhanced Mobile Support */}
-          {filteredEmployees.map((employee, index) => (
-            <TouchableOpacity
-              key={employee.id}
-              onPressIn={() => setPressedRow(employee.id)}
-              onPressOut={() => setPressedRow(null)}
-              onPress={() => navigateToEmployeeDetails(employee.id)}
-              activeOpacity={0.95}
+        {/* Active Filter Indicator */}
+        {filterCompany !== 'all' && (
+          <View style={styles.filterIndicator}>
+            <Text style={styles.filterIndicatorText}>
+              Showing employees from: {filterCompany}
+            </Text>
+            <TouchableOpacity 
+              onPress={() => setFilterCompany('all')}
+              style={styles.clearFilterButton}
             >
-              <Animated.View
-                style={[
-                  styles.modernTableRow,
-                  {
-                    backgroundColor: pressedRow === employee.id
-                      ? CONSISTENT_COLORS.primary + '10'
-                      : index % 2 === 0 
-                        ? theme.colors.surface 
-                        : theme.colors.surfaceVariant + '20',
-                    borderLeftColor: employee.is_active 
-                      ? CONSISTENT_COLORS.active 
-                      : CONSISTENT_COLORS.gray,
-                    borderLeftWidth: 3,
-                  }
-                ]}
-              >
-                {/* Select Checkbox */}
-                <View style={[styles.tableCell, styles.selectColumn]}>
-                  <IconButton
-                    icon={selectedEmployees.includes(employee.id) ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                    size={18}
-                    iconColor={CONSISTENT_COLORS.primary}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      handleSelectEmployee(employee.id);
-                    }}
-                  />
-                </View>
+              <Text style={styles.clearFilterText}>Clear Filter</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
-                {/* Employee Info - Compact with reduced spacing */}
-                <View style={[styles.tableCell, styles.employeeColumn]}>
-                  <View style={styles.employeeInfoContainer}>
-                    <Text style={[styles.employeeName, { color: CONSISTENT_COLORS.primary }]} numberOfLines={1}>
-                      {employee.name || 'Unknown Name'}
-                    </Text>
-                    <Text style={[styles.employeeId, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
-                      {employee.employee_id || 'No ID'}
-                    </Text>
+        {/* Professional Data Table with Horizontal Scroll */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={true} 
+          style={styles.horizontalScrollContainer}
+          contentContainerStyle={{ flexGrow: 1, flexDirection: 'column' }}
+        >
+          <View style={styles.dataTable}>
+            {/* Table Header */}
+            <View style={styles.dataTableHeader}>
+              <View style={styles.checkboxColumn}>
+                <TouchableOpacity onPress={handleSelectAllEmployees}>
+                  <View style={styles.checkbox}>
+                    {selectedEmployees.length === displayEmployees.length && displayEmployees.length > 0 && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
                   </View>
-                </View>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.employeeColumn}>
+                <Text style={styles.columnHeader}>Employee</Text>
+              </View>
+              <View style={styles.tradeColumn}>
+                <Text style={styles.columnHeader}>Trade</Text>
+              </View>
+              <View style={styles.nationalityColumn}>
+                <Text style={styles.columnHeader}>Nationality</Text>
+              </View>
+              <View style={styles.passportColumn}>
+                <Text style={styles.columnHeader}>Passport No.</Text>
+              </View>
+              <View style={styles.labourcardColumn}>
+                <Text style={styles.columnHeader}>Labour Card</Text>
+              </View>
+              <View style={styles.eidColumn}>
+                <Text style={styles.columnHeader}>EID</Text>
+              </View>
+              <View style={styles.wccColumn}>
+                <Text style={styles.columnHeader}>WCC</Text>
+              </View>
+              <View style={styles.expiryColumn}>
+                <Text style={styles.columnHeader}>Expiry Date</Text>
+              </View>
+              <View style={styles.visaStatusColumn}>
+                <Text style={styles.columnHeader}>Visa Status</Text>
+              </View>
+            </View>
 
-                {/* Company - Now with more space and no truncation */}
-                <View style={[styles.tableCell, styles.companyColumn]}>
-                  <Text style={[styles.cellMainText, { color: theme.colors.onSurface }]} numberOfLines={2}>
-                    {employee.company_name || 'No Company'}
-                  </Text>
-                  <Text style={[styles.cellSubText, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
-                    {formatDate(employee.join_date || '')}
-                  </Text>
+            {/* Table Body */}
+            <ScrollView style={styles.tableBody} showsVerticalScrollIndicator={false}>
+              {displayEmployees.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyStateText}>No employees found</Text>
+                  <Text style={styles.emptyStateSubtext}>Try adjusting your search or filters</Text>
                 </View>
-
-                {/* Role - Compact */}
-                <View style={[styles.tableCell, styles.compactColumn]}>
-                  <Text style={[styles.cellMainText, { color: theme.colors.onSurface }]} numberOfLines={1}>
-                    {employee.trade || 'No Trade'}
-                  </Text>
-                  <Text style={[styles.cellSubText, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
-                    {employee.nationality || 'Unknown'}
-                  </Text>
-                </View>
-                
-                {/* Contact - Compact */}
-                <View style={[styles.tableCell, styles.compactColumn]}>
-                  <Text style={[styles.cellMainText, { color: theme.colors.onSurface }]} numberOfLines={1}>
-                    {employee.mobile_number || 'No phone'}
-                  </Text>
-                  <Text style={[styles.cellSubText, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
-                    {employee.email_id ? 
-                      (employee.email_id.length > 12 ? employee.email_id.substring(0, 12) + '...' : employee.email_id)
-                      : 'No email'
-                    }
-                  </Text>
-                </View>
-
-                {/* Visa Status - Using appropriate colors */}
-                <View style={[styles.tableCell, styles.compactColumn]}>
-                  <Chip
-                    mode="flat"
-                    compact
+              ) : (
+                displayEmployees.map((employee, index) => (
+                  <View
+                    key={employee.employee_id}
                     style={[
-                      styles.modernChip,
-                      { 
-                        backgroundColor: getVisaStatusColor(getVisaStatusFromDate(employee.visa_expiry_date || '')) + '20'
-                      }
-                    ]}
-                    textStyle={[
-                      styles.chipText,
-                      { 
-                        color: getVisaStatusColor(getVisaStatusFromDate(employee.visa_expiry_date || ''))
-                      }
+                      styles.dataTableRow,
+                      selectedEmployees.includes(employee.employee_id) && styles.selectedRow
                     ]}
                   >
-                    {getVisaStatusFromDate(employee.visa_expiry_date || '')}
-                  </Chip>
-                  <Text style={[styles.cellSubText, { color: theme.colors.onSurfaceVariant }]} numberOfLines={1}>
-                    {formatDate(employee.visa_expiry_date || '')}
-                  </Text>
-                </View>
-
-                {/* Actions - Compact and Functional - FIXED */}
-                <View style={[styles.tableCell, styles.actionsColumn]}>
-                  <View style={styles.modernActionButtons}>
-                    <IconButton
-                      icon="eye"
-                      size={16}
-                      iconColor={CONSISTENT_COLORS.info}
-                      style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.info + '15' }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        console.log('👁️ Eye icon clicked for employee:', employee.id);
-                        navigateToEmployeeDetails(employee.id);
-                      }}
-                      testID={`view-employee-${employee.id}`}
-                      accessibilityLabel={`View details for ${employee.name}`}
-                    />
-                    <IconButton
-                      icon="pencil"
-                      size={16}
-                      iconColor={CONSISTENT_COLORS.warning}
-                      style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.warning + '15' }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        console.log('✏️ Edit icon clicked for employee:', employee.id);
-                        handleEditEmployee(employee);
-                      }}
-                      testID={`edit-employee-${employee.id}`}
-                      accessibilityLabel={`Edit ${employee.name}`}
-                    />
-                    <IconButton
-                      icon="delete"
-                      size={16}
-                      iconColor={CONSISTENT_COLORS.error}
-                      style={[styles.actionBtn, { backgroundColor: CONSISTENT_COLORS.error + '15' }]}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        console.log('🗑️ Delete icon clicked for employee:', employee.id);
-                        handleDeleteEmployee(employee.id);
-                      }}
-                      testID={`delete-employee-${employee.id}`}
-                      accessibilityLabel={`Delete ${employee.name}`}
-                    />
+                    <View style={styles.checkboxColumn}>
+                      <TouchableOpacity 
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleSelectEmployee(employee.employee_id);
+                        }}
+                      >
+                        <View style={styles.checkbox}>
+                          {selectedEmployees.includes(employee.employee_id) && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.employeeColumn}>
+                      <View style={styles.employeeInfo}>
+                        <View style={styles.avatar}>
+                          <Text style={styles.avatarText}>
+                            {employee.name?.charAt(0)?.toUpperCase() || 'N'}
+                          </Text>
+                        </View>
+                        <View style={styles.employeeDetails}>
+                          <TouchableOpacity onPress={() => navigateToEmployeeDetails(employee.employee_id)}>
+                            <Text style={[styles.employeeName, styles.clickableEmployeeName]}>{employee.name}</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.employeeId}>{employee.employee_id}</Text>
+                        </View>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.tradeColumn}>
+                      <Text style={styles.cellText}>{employee.trade || 'N/A'}</Text>
+                    </View>
+                    
+                    <View style={styles.nationalityColumn}>
+                      <Text style={styles.cellText}>{employee.nationality || 'N/A'}</Text>
+                    </View>
+                    
+                    <View style={styles.passportColumn}>
+                      <Text style={styles.cellText}>{employee.passport_no || employee.passport_number || 'N/A'}</Text>
+                    </View>
+                    
+                    <View style={styles.labourcardColumn}>
+                      <Text style={styles.cellText}>{employee.labourcard_no || 'N/A'}</Text>
+                    </View>
+                    
+                    <View style={styles.eidColumn}>
+                      <Text style={styles.cellText}>{employee.eid || 'N/A'}</Text>
+                    </View>
+                    
+                    <View style={styles.wccColumn}>
+                      <Text style={styles.cellText}>{employee.wcc || 'N/A'}</Text>
+                    </View>
+                    
+                    <View style={styles.expiryColumn}>
+                      <Text style={styles.cellText}>
+                        {formatDateDDMMYYYY(employee.visa_expiry_date)}
+                      </Text>
+                    </View>
+                    
+                    <View style={styles.visaStatusColumn}>
+                      {renderStatusChip(getVisaStatusFromDate(employee.visa_expiry_date), 'visa')}
+                    </View>
                   </View>
-                </View>
-              </Animated.View>
-            </TouchableOpacity>
-          ))}
-          
-          {/* Bottom spacing for FAB */}
-          <View style={{ height: 100 }} />
+                ))
+              )}
+            </ScrollView>
+          </View>
         </ScrollView>
-    </Surface>
-    </View>
-  );
+      </View>
+    );
+  };
 
   return (
     <AdminLayout title="Employees" currentRoute="/admin/employees">
       <View style={[styles.container]}>
-        {/* Enhanced Header with Search and Filters */}
-        <Surface style={styles.headerControls} elevation={2}>
-          <View style={styles.searchContainer}>
+        {/* Search Bar */}
+        <Surface style={styles.searchHeaderControls} elevation={1}>
           <Searchbar
-              placeholder="Search employees..."
+            placeholder="Search employees..."
             onChangeText={setSearchQuery}
             value={searchQuery}
-              style={styles.modernSearchBar}
+            style={styles.searchBar}
             iconColor={CONSISTENT_COLORS.primary}
+            clearIcon={searchQuery ? 'close' : undefined}
+            onIconPress={() => setSearchQuery('')}
           />
-          </View>
           
-          <View style={styles.filterContainer}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterButtons}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Chip
-                  selected={filterStatus === 'all'}
-                  onPress={() => setFilterStatus('all')}
-                  style={[styles.filterChip, { backgroundColor: filterStatus === 'all' ? CONSISTENT_COLORS.primary + '20' : theme.colors.surface }]}
-                  textStyle={{ color: filterStatus === 'all' ? CONSISTENT_COLORS.primary : theme.colors.onSurface }}
-                  showSelectedOverlay
-                >
-                  All ({filteredEmployees.length})
-                </Chip>
-                <Chip
-                  selected={filterStatus === 'active'}
-                  onPress={() => setFilterStatus('active')}
-                  style={[styles.filterChip, { backgroundColor: filterStatus === 'active' ? CONSISTENT_COLORS.active + '20' : theme.colors.surface }]}
-                  textStyle={{ color: filterStatus === 'active' ? CONSISTENT_COLORS.active : theme.colors.onSurface }}
-                  showSelectedOverlay
-                >
-                  Active ({employees?.filter(e => e.is_active).length || 0})
-                </Chip>
-                <Chip
-                  selected={filterStatus === 'inactive'}
-                  onPress={() => setFilterStatus('inactive')}
-                  style={[styles.filterChip, { backgroundColor: filterStatus === 'inactive' ? CONSISTENT_COLORS.error + '20' : theme.colors.surface }]}
-                  textStyle={{ color: filterStatus === 'inactive' ? CONSISTENT_COLORS.error : theme.colors.onSurface }}
-                  showSelectedOverlay
-                >
-                  Inactive ({employees?.filter(e => !e.is_active).length || 0})
-                </Chip>
-              </View>
-            </ScrollView>
-
-            <View style={styles.viewControls}>
-              <IconButton
-                icon="sort"
-                onPress={() => setMenuVisible(true)}
-                iconColor={theme.colors.onSurface}
-                style={[styles.controlButton, { backgroundColor: theme.colors.surfaceVariant }]}
-              />
-            </View>
-          </View>
+          {/* Add Employee Button */}
+          <Button
+            mode="contained"
+            onPress={() => setShowAddModal(true)}
+            style={styles.addEmployeeButton}
+            icon="plus"
+            buttonColor={CONSISTENT_COLORS.primary}
+          >
+            Add Employee
+          </Button>
         </Surface>
 
         {/* Content with full height and proper scrolling */}
@@ -892,38 +851,29 @@ export default function EmployeesScreen() {
             {renderTableView()}
           </Animated.View>
           ) : (
-            <View style={styles.emptyState}>
-              <IconButton icon="account-group" size={64} iconColor={theme.colors.onSurfaceVariant} />
-              <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
-                No employees found
+            <View style={styles.emptyStateContainer}>
+              <IconButton icon="account-group" size={64} iconColor={CONSISTENT_COLORS.gray} />
+              <Text variant="titleMedium" style={styles.emptyStateTitle}>
+                {snackbar ? 'Error loading employees' : 'No employees found'}
               </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 8 }}>
-                {searchQuery ? 'Try adjusting your search criteria' : 'Add your first employee to get started'}
+              <Text variant="bodyMedium" style={styles.emptyStateSubtitle}>
+                {snackbar ? 'There was a problem loading employee data. Please try again.' : 'Try adjusting your filters or add a new employee.'}
               </Text>
-              {!searchQuery && (
-                <Button 
-                  mode="contained" 
-                  onPress={() => setShowAddModal(true)}
-                  style={[styles.modernButton, { marginTop: 24, backgroundColor: CONSISTENT_COLORS.primary }]}
-                  labelStyle={{ color: 'white', fontWeight: '600' }}
-                  icon="plus"
-                >
+              {snackbar ? (
+                <Button mode="contained" onPress={handleRefresh} style={styles.emptyStateButton} icon="refresh">
+                  Retry
+                </Button>
+              ) : (
+                <Button mode="contained" onPress={() => setShowAddModal(true)} style={styles.emptyStateButton} icon="plus">
                   Add Employee
                 </Button>
               )}
             </View>
           )}
 
-        {/* Beautiful Floating Action Button */}
-        <FAB
-          icon="plus"
-          style={[styles.modernFab, { backgroundColor: CONSISTENT_COLORS.primary }]}
-          onPress={() => setShowAddModal(true)}
-          label="Add Employee"
-          color="white"
-        />
 
-        {/* Success Overlay */}
+
+        {/* Modern Success Animation */}
         <Animated.View style={[
           styles.successOverlay,
           {
@@ -945,38 +895,6 @@ export default function EmployeesScreen() {
             <Text style={styles.successText}>Operation completed successfully! 🎉</Text>
           </View>
         </Animated.View>
-
-        {/* Menu and Modal components remain the same */}
-        <Menu
-          visible={menuVisible}
-          onDismiss={() => setMenuVisible(false)}
-          anchor={<View />}
-        >
-          <Menu.Item
-            onPress={() => {
-              setSortBy('name');
-              setMenuVisible(false);
-            }}
-            title="Sort by Name"
-            leadingIcon={sortBy === 'name' ? 'check' : undefined}
-          />
-          <Menu.Item
-            onPress={() => {
-              setSortBy('join_date');
-              setMenuVisible(false);
-            }}
-            title="Sort by Join Date"
-            leadingIcon={sortBy === 'join_date' ? 'check' : undefined}
-          />
-          <Menu.Item
-            onPress={() => {
-              setSortBy('visa_expiry');
-              setMenuVisible(false);
-            }}
-            title="Sort by Visa Expiry"
-            leadingIcon={sortBy === 'visa_expiry' ? 'check' : undefined}
-          />
-        </Menu>
 
         {/* Enhanced Add/Edit Employee Modal */}
         <Portal>
@@ -1046,34 +964,15 @@ export default function EmployeesScreen() {
                     <Text variant="bodyMedium" style={[styles.fieldLabel, { color: theme.colors.onSurfaceVariant }]}>
                       Company *
                     </Text>
-                    <Menu
-                      visible={companyMenuVisible}
-                      onDismiss={() => setCompanyMenuVisible(false)}
-                      anchor={
-                        <Button
-                          mode="outlined"
-                          onPress={() => setCompanyMenuVisible(true)}
-                          style={[styles.modernDropdownButton, { borderColor: CONSISTENT_COLORS.primary }]}
-                          contentStyle={styles.dropdownContent}
-                          icon="domain"
-                          labelStyle={{ color: theme.colors.onSurface, fontWeight: '500' }}
-                        >
-                          {newEmployee.company_name || 'Select Company'}
-                        </Button>
-                      }
+                    <Picker
+                      selectedValue={newEmployee.company_name}
+                      onValueChange={(value) => setNewEmployee({...newEmployee, company_name: value})}
+                      style={{ backgroundColor: 'white', borderRadius: 8 }}
                     >
                       {companies.map((company) => (
-                        <Menu.Item
-                          key={company}
-                          onPress={() => {
-                            setNewEmployee({...newEmployee, company_name: company});
-                            setCompanyMenuVisible(false);
-                          }}
-                          title={company}
-                          leadingIcon={newEmployee.company_name === company ? 'check' : undefined}
-                        />
+                        <Picker.Item key={company} label={company} value={company} />
                       ))}
-                    </Menu>
+                    </Picker>
                   </View>
                 </View>
 
@@ -1169,17 +1068,14 @@ export default function EmployeesScreen() {
                     Visa Status
                   </Text>
                   
-                  <SegmentedButtons
-                    value={newEmployee.visa_status}
+                  <Picker
+                    selectedValue={newEmployee.visa_status}
                     onValueChange={(value) => setNewEmployee({...newEmployee, visa_status: value})}
-                    buttons={VISA_STATUS_OPTIONS.map(option => ({
-                      value: option.value,
-                      label: option.label,
-                      icon: option.value === 'ACTIVE' ? 'check-circle' : 
-                            option.value === 'INACTIVE' ? 'close-circle' : 'alert-circle'
-                    }))}
-                    style={styles.modernSegmentedButtons}
-                  />
+                  >
+                    {VISA_STATUS_OPTIONS.map(option => (
+                      <Picker.Item key={option.value} label={option.label} value={option.value} />
+                    ))}
+                  </Picker>
                 </View>
               </ScrollView>
 
@@ -1231,7 +1127,7 @@ export default function EmployeesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FAFAFA',
+    backgroundColor: '#F8FAFC',
   },
   headerControls: {
     paddingHorizontal: 16,
@@ -1253,11 +1149,8 @@ const styles = StyleSheet.create({
         boxShadow: '0px 2px 4px rgba(197,48,48,0.1)',
       }
     })
-  },
-  searchContainer: {
-    marginBottom: 16,
-  },
-  modernSearchBar: {
+      },
+    modernSearchBar: {
     borderRadius: 12,
     elevation: 2,
     backgroundColor: 'white',
@@ -1292,6 +1185,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    paddingBottom: 20,
+    minHeight: '80vh', // Ensure good minimum height
   },
   loadingContainer: {
     flex: 1,
@@ -1299,11 +1194,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 64,
   },
-  emptyState: {
+  emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 64,
+    padding: 32,
+    marginTop: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyStateButton: {
+    borderRadius: 8,
+    marginTop: 8,
   },
   modernFab: {
     position: 'absolute',
@@ -1379,165 +1290,417 @@ const styles = StyleSheet.create({
   },
   
   // Modern Table Styles - Enhanced for full height and better UI
-  modernTableContainer: {
+  modernTableWrapper: {
     flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-    margin: 16,
-    marginBottom: 0,
+    backgroundColor: '#F8FAFC',
+    pointerEvents: 'auto',
   },
-  tableHeader: {
-    padding: 20,
+  tableControlsHeader: {
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    borderBottomColor: '#E2E8F0',
   },
-  tableTitle: {
-    fontWeight: 'bold',
-    textAlign: 'center',
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  tableScrollView: {
+  tableTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  employeeCount: {
+    fontSize: 14,
+    color: '#64748B',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  filtersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    alignItems: 'flex-end',
+  },
+  filterGroup: {
     flex: 1,
-    maxHeight: '100%',
+  },
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modernPicker: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    height: 40,
+  },
+  modernTableContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+    margin: 0,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  tableHorizontalScroll: {
+    flex: 1,
+    minWidth: '100%',
+  },
+  tableContent: {
+    minWidth: '100%',
   },
   modernTableHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    backgroundColor: '#E2E8F0',
     borderBottomWidth: 2,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
-    zIndex: 1,
+    borderBottomColor: '#CBD5E1',
+    paddingVertical: 18,
   },
-  modernTableRow: {
+  sortableHeaderCell: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
-    minHeight: 82,
-  },
-  tableCell: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    justifyContent: 'center',
-  },
-  selectColumn: {
-    width: 50,
-    alignItems: 'center',
-  },
-  employeeColumn: {
-    flex: 1.8,
-    minWidth: 130,
-  },
-  companyColumn: {
-    flex: 2.2,
-    minWidth: 160,
-  },
-  compactColumn: {
-    flex: 1,
-    minWidth: 100,
-  },
-  actionsColumn: {
-    width: 110,
-    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   headerText: {
-    fontWeight: 'bold',
     fontSize: 12,
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  employeeInfoContainer: {
+  tableBody: {
     flex: 1,
   },
-  employeeName: {
-    fontWeight: 'bold',
+  dataTableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
+    minHeight: 80,
+  },
+  selectedRow: {
+    backgroundColor: '#FEF2F2',
+    borderLeftWidth: 3,
+    borderLeftColor: '#DC2626',
+  },
+  employeeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#DC2626',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  avatarText: {
     fontSize: 14,
-    marginBottom: 1,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  employeeDetails: {
+    flex: 1,
+    paddingVertical: 2,
+  },
+  employeeName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
   },
   employeeId: {
-    fontSize: 12,
-    opacity: 0.8,
-  },
-  cellMainText: {
-    fontSize: 13,
-    fontWeight: '500',
-    marginBottom: 2,
-    lineHeight: 16,
-  },
-  cellSubText: {
     fontSize: 11,
-    opacity: 0.7,
+    color: '#64748B',
   },
-  modernChip: {
-    height: 24,
-    marginBottom: 4,
+  employeeRole: {
+    fontSize: 11,
+    color: '#64748B',
   },
-  chipText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  modernActionButtons: {
+  
+  actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  actionBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    margin: 0,
-  },
-  successOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  actionButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
   },
-  successContainer: {
-    padding: 20,
-    borderRadius: 12,
-    backgroundColor: 'white',
+  actionIcon: {
+    margin: 0,
   },
-  successText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'black',
-    marginTop: 16,
-  },
-  filterScrollView: {
+  
+  // Essential Missing Styles
+  emptyState: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 64,
   },
-  viewControls: {
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  
+  statusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginVertical: 2,
+  },
+  statusChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  
+
+  
+  filterIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  controlButton: {
-    borderRadius: 12,
-  },
-  bulkActionsBar: {
-    padding: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'rgba(220, 20, 60, 0.2)',
-    backgroundColor: 'linear-gradient(135deg, #ffffff 0%, #fef7f7 100%)',
-  },
-  bulkActions: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#EBF8FF',
+    borderRadius: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
   },
-  bulkActionButton: {
-    borderRadius: 12,
+  filterIndicatorText: {
+    fontSize: 13,
+    color: '#1E40AF',
+    fontWeight: '500',
+  },
+  clearFilterButton: {
+    paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  fullHeightTableContainer: {
+  clearFilterText: {
+    fontSize: 12,
+    color: '#3B82F6',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  
+  tableContainer: {
     flex: 1,
-    paddingHorizontal: 0,
+    backgroundColor: '#FFFFFF',
+    margin: 0,
+    height: '80vh', // Fixed height to use more screen space
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  pageTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 8,
+  },
+  headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  entriesControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 24,
+  },
+  entriesLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+    marginRight: 8,
+  },
+  entriesDropdown: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    height: 36,
+    width: 80,
+    marginHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  entriesDropdownText: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  entriesDropdownArrow: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  entriesText: {
+    fontSize: 14,
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  filterControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginRight: 16,
+  },
+  filterDropdown: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    height: 40,
+    width: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+  },
+  filterDropdownText: {
+    fontSize: 14,
+    color: '#374151',
+    flex: 1,
+  },
+  filterDropdownArrow: {
+    fontSize: 12,
+    color: '#64748B',
+  },
+  
+  dataTable: {
+    flex: 1,
+    flexDirection: 'column',
+    minWidth: 1000,
+  },
+  dataTableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: '#E2E8F0',
+    borderBottomWidth: 2,
+    borderBottomColor: '#CBD5E1',
+  },
+  columnHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#374151',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    textAlign: 'center',
+  },
+  
+  // Column Widths - Adjusted to reduce gap between employee and trade columns, increased space between nationality and passport
+  checkboxColumn: { width: 50, alignItems: 'center' },
+  employeeColumn: { flex: 1, minWidth: 120, paddingRight: 8, maxWidth: 180 }, // Reduced padding and added max width
+  tradeColumn: { width: 100, paddingLeft: 8 }, // Further reduced width
+  nationalityColumn: { width: 160, paddingRight: 8 }, // Increased width for header to fit "NATIONALITY" on single line
+  passportColumn: { width: 120, paddingLeft: 8 }, // Adjusted padding
+  labourcardColumn: { width: 100 }, // Reduced width
+  eidColumn: { width: 80 }, // Reduced width
+  wccColumn: { width: 80 }, // Reduced width
+  expiryColumn: { width: 100 }, // Reduced width
+  visaStatusColumn: { width: 100, alignItems: 'center' }, // Reduced width
+  
+  checkbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 3,
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmark: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#DC2626',
+  },
+  
+  
+  cellText: {
+    fontSize: 12,
+    color: '#374151',
+    textAlign: 'center',
+    paddingVertical: 4,
+    lineHeight: 18,
+  },
+  
+  // New styles for search header and clickable employee name
+  searchHeaderControls: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  searchBar: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    elevation: 0,
+  },
+  addEmployeeButton: {
+    minWidth: 120,
+  },
+  clickableEmployeeName: {
+    color: CONSISTENT_COLORS.primary,
+    textDecorationLine: 'underline',
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  horizontalScrollContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
   },
 });
 

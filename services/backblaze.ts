@@ -265,36 +265,43 @@ export const listEmployeeDocuments = async (employeeId: string): Promise<FileInf
   console.log('☁️ [BACKBLAZE] Listing documents for employee:', employeeId);
   
   if (!isBackblazeConfigured()) {
-    console.log('☁️ [BACKBLAZE] Demo mode - returning mock documents');
+    console.log('☁️ [BACKBLAZE] Demo mode - returning enhanced mock documents');
     
-    // Return mock documents for demo
-    const mockDocuments: FileInfo[] = [
-      {
-        fileId: `demo_passport_${employeeId}`,
-        fileName: `employees/${employeeId}/passport/passport.pdf`,
-        contentType: 'application/pdf',
-        contentLength: 2048576,
-        uploadTimestamp: Date.now() - 86400000, // 1 day ago
-        url: `https://demo-bucket.backblazeb2.com/file/cubs-documents/employees/${employeeId}/passport/passport.pdf`
-      },
-      {
-        fileId: `demo_visa_${employeeId}`,
-        fileName: `employees/${employeeId}/visa/visa_copy.pdf`,
-        contentType: 'application/pdf',
-        contentLength: 1536000,
-        uploadTimestamp: Date.now() - 172800000, // 2 days ago
-        url: `https://demo-bucket.backblazeb2.com/file/cubs-documents/employees/${employeeId}/visa/visa_copy.pdf`
-      },
-      {
-        fileId: `demo_contract_${employeeId}`,
-        fileName: `employees/${employeeId}/contract/employment_contract.pdf`,
-        contentType: 'application/pdf',
-        contentLength: 3072000,
-        uploadTimestamp: Date.now() - 259200000, // 3 days ago
-        url: `https://demo-bucket.backblazeb2.com/file/cubs-documents/employees/${employeeId}/contract/employment_contract.pdf`
-      }
+    // Return enhanced mock documents for demo - more variety and realistic numbers
+    const documentTypes = ['passport', 'visa', 'contract', 'id_copy', 'address_proof', 'photo', 'resume', 'certificates', 'medical_report', 'bank_details'];
+    const fileTypes = [
+      { ext: '.pdf', type: 'application/pdf', icon: 'file-pdf-box' },
+      { ext: '.jpg', type: 'image/jpeg', icon: 'file-image' },
+      { ext: '.png', type: 'image/png', icon: 'file-image' },
+      { ext: '.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', icon: 'file-document' },
+      { ext: '.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', icon: 'file-excel' }
     ];
     
+    const mockDocuments: FileInfo[] = [];
+    
+    // Generate 5-12 documents per employee for realistic demo
+    const numDocs = Math.floor(Math.random() * 8) + 5; // 5-12 documents
+    
+    for (let i = 0; i < numDocs; i++) {
+      const docType = documentTypes[Math.floor(Math.random() * documentTypes.length)];
+      const fileType = fileTypes[Math.floor(Math.random() * fileTypes.length)];
+      const timestamp = Date.now() - (Math.random() * 365 * 24 * 60 * 60 * 1000); // Random date within last year
+      const size = Math.floor(Math.random() * 5000000) + 500000; // 500KB - 5MB
+      
+      mockDocuments.push({
+        fileId: `demo_${docType}_${i}_${employeeId}`,
+        fileName: `employees/${employeeId}/${docType}/${docType}_${i}${fileType.ext}`,
+        contentType: fileType.type,
+        contentLength: size,
+        uploadTimestamp: timestamp,
+        url: `https://demo-bucket.backblazeb2.com/file/cubs-documents/employees/${employeeId}/${docType}/${docType}_${i}${fileType.ext}`
+      });
+    }
+    
+    // Sort by upload timestamp (newest first)
+    mockDocuments.sort((a, b) => b.uploadTimestamp - a.uploadTimestamp);
+    
+    console.log(`☁️ [BACKBLAZE] Generated ${mockDocuments.length} mock documents for employee ${employeeId}`);
     return mockDocuments;
   }
 

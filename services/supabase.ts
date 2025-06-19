@@ -16,7 +16,7 @@ if (!isSupabaseConfigured) {
 export interface Database {
   public: {
     Tables: {
-      employees: {
+      employee_table: {
         Row: Employee;
         Insert: Omit<Employee, 'id'>;
         Update: Partial<Omit<Employee, 'id'>>;
@@ -69,23 +69,41 @@ export interface Database {
 
 // Employee interface
 export interface Employee {
-  id: string;
-  employee_id: string;
+  employee_id?: string;
   name: string;
+  dob?: string;
   trade: string;
   nationality: string;
-  date_of_birth: string;
-  mobile_number: string;
-  home_phone_number: string | null;
-  email_id: string;
-  company_id: string;
+  joining_date?: string;
+  passport_no?: string;
+  passport_expiry?: string;
+  labourcard_no?: string;
+  labourcard_expiry?: string;
+  visastamping_date?: string;
+  visa_expiry_date?: string;
+  eid?: string;
+  leave_date?: string;
+  wcc?: string;
+  lulu_wps_card?: string;
+  basic_salary?: string;
   company_name: string;
-  join_date: string;
-  visa_expiry_date: string;
-  visa_status: string;
-  passport_number: string;
-  status: string;
-  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  passport_number?: string;
+  visa_number?: string;
+  visa_type?: string;
+  visa_status?: string;
+  
+  // Legacy/computed fields for compatibility
+  id?: string;
+  date_of_birth?: string;
+  mobile_number?: string;
+  home_phone_number?: string;
+  email_id?: string;
+  company_id?: string;
+  join_date?: string;
+  status?: string;
+  is_active?: boolean;
 }
 
 // EmployeeDocument interface
@@ -186,7 +204,7 @@ export const subscribeToEmployeeChanges = (callback: (payload: any) => void) => 
     .channel('employee-changes')
     .on(
       'postgres_changes',
-      { event: '*', schema: 'public', table: 'employees' },
+      { event: '*', schema: 'public', table: 'employee_table' },
       callback
     )
     .subscribe();

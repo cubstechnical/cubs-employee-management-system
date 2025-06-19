@@ -1,32 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import { View, ScrollView, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { 
-  Text, 
-  Card, 
-  Button, 
-  ActivityIndicator, 
-  IconButton, 
-  useTheme, 
-  Snackbar, 
-  TextInput, 
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { View, ScrollView, Alert, StyleSheet, TouchableOpacity, RefreshControl, FlatList } from 'react-native';
+import {
+  Text,
+  Button,
+  IconButton,
+  Surface,
+  ActivityIndicator,
+  Searchbar,
+  Card,
+  FAB,
   Portal,
   Modal,
-  Surface,
-  Searchbar,
-  Chip,
-  Menu,
-  Divider,
-  FAB,
-  DataTable
+  TextInput,
+  Snackbar,
 } from 'react-native-paper';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useTheme } from 'react-native-paper';
 import AdminLayout from '../../components/AdminLayout';
-import { CustomTheme } from '../../theme';
 import { useEmployees } from '../../hooks/useEmployees';
-import * as DocumentPicker from 'expo-document-picker';
-import { uploadToBackblaze, listEmployeeDocuments, deleteFromBackblaze, downloadFromBackblaze } from '../../services/backblaze';
-import { withAuthGuard } from '../../components/AuthGuard';
+import { documentService } from '../../services/documentService';
 
+// Type definitions
 interface Document {
   id: string;
   employeeId: string;
@@ -38,701 +31,514 @@ interface Document {
   url: string;
 }
 
-const DOCUMENT_TYPES = [
-  'passport',
-  'visa',
-  'emirates_id',
-  'labor_card', 
-  'contract',
-  'salary_certificate',
-  'bank_statement',
-  'medical_certificate',
-  'certificate',
-  'other'
-];
+interface CompanyFolder {
+  name: string;
+  employees: EmployeeFolder[];
+  documentCount: number;
+  totalSize: number;
+}
 
-export default function AdminDocumentsScreen() {
-  const theme = useTheme() as CustomTheme;
-  const { employees, refreshEmployees } = useEmployees();
-  const { employeeId: preSelectedEmployeeId } = useLocalSearchParams();
+interface EmployeeFolder {
+  id: string;
+  name: string;
+  trade: string;
+  documents: Document[];
+  documentCount: number;
+  totalSize: number;
+}
+
+interface CustomFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  type: 'custom' | 'employee' | 'company';
+  documents: Document[];
+  subfolders: CustomFolder[];
+  documentCount: number;
+  totalSize: number;
+  createdAt: Date;
+}
+
+const CONSISTENT_COLORS = {
+  primary: '#1976D2',
+  secondary: '#DC004E',
+  success: '#388E3C',
+  warning: '#F57C00',
+  error: '#D32F2F',
+  info: '#0288D1',
+  folder: '#FFB74D',
+  document: '#42A5F5',
+};
+
+function AdminDocumentsScreen() {
+  const theme = useTheme();
+  const { employees, refreshEmployees, isLoading: employeesLoading } = useEmployees();
   
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   
-  // Filters and search
+  // Navigation and view states
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedEmployee, setSelectedEmployee] = useState<string>(preSelectedEmployeeId as string || '');
-  const [selectedDocumentType, setSelectedDocumentType] = useState<string>('all');
-  const [employeeMenuVisible, setEmployeeMenuVisible] = useState(false);
-  const [documentTypeMenuVisible, setDocumentTypeMenuVisible] = useState(false);
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+  const [breadcrumb, setBreadcrumb] = useState<string[]>([]);
   
-  // Modals
-  const [uploadModalVisible, setUploadModalVisible] = useState(false);
-  const [uploadEmployee, setUploadEmployee] = useState<string>('');
-  const [uploadDocumentType, setUploadDocumentType] = useState<string>('passport');
-  const [uploadFileName, setUploadFileName] = useState<string>('');
-  const [uploadExpiryDate, setUploadExpiryDate] = useState<string>('');
-  const [uploadDocumentNumber, setUploadDocumentNumber] = useState<string>('');
-  const [uploadIssuingAuthority, setUploadIssuingAuthority] = useState<string>('');
-  const [uploadNotes, setUploadNotes] = useState<string>('');
+  // Custom folder management
+  const [customFolders, setCustomFolders] = useState<CustomFolder[]>([]);
+  const [newFolderModalVisible, setNewFolderModalVisible] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
 
-  // View mode
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  // Performance optimization states
+  const [documentCache, setDocumentCache] = useState<Map<string, Document[]>>(new Map());
 
   useEffect(() => {
-    loadDocuments();
+    // Only load documents if employees are available
+    if (employees && employees.length > 0) {
+      loadDocuments();
+    }
+  }, [employees]);
+
+  useEffect(() => {
+    // Initial fetch for employees if the store is empty
     if (!employees || employees.length === 0) {
       refreshEmployees();
     }
   }, []);
 
-  useEffect(() => {
-    if (preSelectedEmployeeId) {
-      setSelectedEmployee(preSelectedEmployeeId as string);
-    }
-  }, [preSelectedEmployeeId]);
-
   const loadDocuments = async () => {
     setLoading(true);
     setError(null);
+    setDocuments([]);
+    setDocumentCache(new Map());
+    
     try {
-      const allDocuments: Document[] = [];
-      
-      if (employees && employees.length > 0) {
-        // Fetch documents for all employees
-        for (const employee of employees) {
-          try {
-            const employeeDocs = await listEmployeeDocuments(employee.id);
-            
-            employeeDocs.forEach((doc, index) => {
-              allDocuments.push({
-                id: doc.fileName, // Use fileName as ID for now
-                employeeId: employee.id,
-                employeeName: employee.name,
-                fileName: doc.fileName.split('/').pop() || 'Unknown File',
-                documentType: determineDocumentType(doc.fileName),
-                uploadDate: new Date(doc.uploadTimestamp),
-                fileSize: doc.contentLength,
-                url: doc.url,
-              });
-            });
-          } catch (docError) {
-            console.warn(`Error loading documents for employee ${employee.name}:`, docError);
-            // Continue with other employees even if one fails
-          }
-        }
+      if (!employees || employees.length === 0) {
+        setLoading(false);
+        return;
       }
+
+      console.log(`📄 [DOCS] Loading documents from Supabase employee_documents table`);
+      
+      // Load all documents from Supabase employee_documents table
+      const supabaseDocuments = await documentService.getAllDocuments();
+      console.log(`📄 [DOCS] Found ${supabaseDocuments.length} documents in database`);
+      
+      const allDocuments: Document[] = [];
+      const newCache = new Map<string, Document[]>();
+      
+      // Convert Supabase documents to our Document interface
+      const processedDocuments = supabaseDocuments.map((doc) => {
+        const employee = employees.find(e => e.employee_id === doc.employee_id);
+        return {
+          id: doc.id,
+          employeeId: doc.employee_id,
+          employeeName: employee?.name || 'Unknown Employee',
+          fileName: doc.file_name,
+          documentType: doc.document_type || 'document',
+          uploadDate: new Date(doc.created_at),
+          fileSize: doc.file_size || 0,
+          url: doc.file_url,
+        };
+      });
+
+      // Build cache
+      processedDocuments.forEach(doc => {
+        const employeeId = doc.employeeId;
+        if (!newCache.has(employeeId)) {
+          newCache.set(employeeId, []);
+        }
+        newCache.get(employeeId)!.push(doc);
+        allDocuments.push(doc);
+      });
       
       setDocuments(allDocuments);
-    } catch (err) {
+      setDocumentCache(newCache);
+      
+    } catch (error) {
+      console.error('📄 [DOCS] Error loading documents:', error);
       setError('Failed to load documents');
-      console.error('Document loading error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to determine document type from filename
-  const determineDocumentType = (fileName: string): string => {
-    const lowerFileName = fileName.toLowerCase();
-    
-    if (lowerFileName.includes('passport')) return 'passport';
-    if (lowerFileName.includes('visa')) return 'visa';
-    if (lowerFileName.includes('emirates') || lowerFileName.includes('id')) return 'emirates_id';
-    if (lowerFileName.includes('labor') || lowerFileName.includes('labour')) return 'labor_card';
-    if (lowerFileName.includes('contract')) return 'contract';
-    if (lowerFileName.includes('salary') || lowerFileName.includes('certificate')) return 'salary_certificate';
-    if (lowerFileName.includes('bank') || lowerFileName.includes('statement')) return 'bank_statement';
-    if (lowerFileName.includes('medical') || lowerFileName.includes('health')) return 'medical_certificate';
-    if (lowerFileName.includes('certificate') || lowerFileName.includes('cert')) return 'certificate';
-    
-    return 'other';
-  };
-
-  const handleUpload = async () => {
-    if (!uploadEmployee) {
-      setSnackbar('Please select an employee');
-      return;
-    }
-    
-    if (uploadDocumentType === 'visa' && !uploadExpiryDate) {
-      setSnackbar('Visa expiry date is required for visa documents');
-      return;
-    }
-    
-    setUploading(true);
+  const handleRefresh = async () => {
+    setRefreshing(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-        copyToCacheDirectory: true,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        const fileName = uploadFileName || file.name;
-        
-        // Use DocumentService instead of direct Backblaze upload
-        const { documentService } = await import('../../services/documentService');
-        
-        const uploadResult = await documentService.uploadDocument({
-          fileUri: file.uri,
-          fileName: fileName,
-          employeeId: uploadEmployee,
-          documentType: uploadDocumentType,
-          uploadedBy: 'admin', // TODO: Get from auth context
-          expiryDate: uploadExpiryDate || undefined,
-          documentNumber: uploadDocumentNumber || undefined,
-          issuingAuthority: uploadIssuingAuthority || undefined,
-          notes: uploadNotes || undefined,
-        });
-        
-        if (uploadResult) {
-          setSnackbar('Document uploaded successfully!');
-          setUploadModalVisible(false);
-          resetUploadForm();
-          await loadDocuments();
-        } else {
-          throw new Error('Upload failed');
-        }
-      }
-    } catch (err) {
-      setSnackbar('Failed to upload document');
-      console.error('Upload error:', err);
+      await refreshEmployees();
+      await loadDocuments();
+    } catch (error) {
+      console.error('Refresh error:', error);
+      setSnackbar('Failed to refresh');
     } finally {
-      setUploading(false);
+      setRefreshing(false);
     }
   };
-
-  const handleDownload = async (document: Document) => {
-    try {
-      const downloadResult = await downloadFromBackblaze(document.id, document.fileName);
-      
-      if (downloadResult.success && downloadResult.url) {
-        // Open the download URL
-        if (typeof window !== 'undefined') {
-          window.open(downloadResult.url, '_blank');
-        }
-        setSnackbar('Download started!');
-      } else {
-        throw new Error(downloadResult.error || 'Download failed');
-      }
-    } catch (err) {
-      setSnackbar('Failed to download document');
-      console.error('Download error:', err);
-    }
-  };
-
-  const handleDelete = async (document: Document) => {
-    Alert.alert(
-      'Delete Document',
-      `Are you sure you want to delete "${document.fileName}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const deleteResult = await deleteFromBackblaze(document.id, document.fileName);
-              
-              if (deleteResult.success) {
-                setSnackbar('Document deleted successfully');
-                await loadDocuments();
-              } else {
-                throw new Error(deleteResult.error || 'Delete failed');
-              }
-            } catch (err) {
-              setSnackbar('Failed to delete document');
-              console.error('Delete error:', err);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const resetUploadForm = () => {
-    setUploadEmployee('');
-    setUploadDocumentType('passport');
-    setUploadFileName('');
-    setUploadExpiryDate('');
-    setUploadDocumentNumber('');
-    setUploadIssuingAuthority('');
-    setUploadNotes('');
-  };
-
-  const filteredDocuments = documents.filter(doc => {
-    const matchesSearch = 
-      doc.fileName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.employeeName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      doc.documentType.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesEmployee = selectedEmployee === '' || doc.employeeId === selectedEmployee;
-    const matchesDocumentType = selectedDocumentType === 'all' || doc.documentType === selectedDocumentType;
-    
-    return matchesSearch && matchesEmployee && matchesDocumentType;
-  });
 
   const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getDocumentTypeIcon = (type: string): string => {
-    switch (type) {
-      case 'passport': return 'passport';
-      case 'visa': return 'card-account-details';
-      case 'emirates_id': return 'card-account-details-outline';
-      case 'labor_card': return 'badge-account';
-      case 'contract': return 'file-document';
-      case 'salary_certificate': return 'cash';
-      case 'bank_statement': return 'bank';
-      case 'medical_certificate': return 'medical-bag';
-      case 'certificate': return 'certificate';
+  const getFileIcon = (fileName: string): string => {
+    const extension = fileName.split('.').pop()?.toLowerCase();
+    switch (extension) {
+      case 'pdf': return 'file-pdf-box';
+      case 'doc':
+      case 'docx': return 'file-word-box';
+      case 'xls':
+      case 'xlsx': return 'file-excel-box';
+      case 'ppt':
+      case 'pptx': return 'file-powerpoint-box';
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'bmp': return 'file-image';
+      case 'zip':
+      case 'rar':
+      case '7z': return 'file-archive';
+      case 'txt': return 'file-document-outline';
       default: return 'file';
     }
   };
 
-  const renderDocumentCard = (document: Document) => (
-    <Card key={document.id} style={[styles.documentCard, { backgroundColor: theme.colors.surface }]} elevation={2}>
-      <Card.Content>
-        <View style={styles.cardHeader}>
-          <View style={styles.documentInfo}>
-            <Text variant="titleMedium" style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
-              {document.fileName}
-            </Text>
-            <TouchableOpacity onPress={() => router.push(`/(admin)/employees/${document.employeeId}`)}>
-              <Text variant="bodyMedium" style={{ color: theme.colors.primary, marginTop: 4 }}>
-                {document.employeeName}
-              </Text>
-            </TouchableOpacity>
-            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, marginTop: 2 }}>
-              {formatFileSize(document.fileSize)} • {document.uploadDate.toLocaleDateString()}
-            </Text>
-          </View>
-          
+  // Organize documents by company and employee
+  const companyFolders = useMemo(() => {
+    const companies = [...new Set(employees.map(e => e.company_name).filter(Boolean))];
+    return companies.map(companyName => {
+      const companyEmployees = employees.filter(e => e.company_name === companyName);
+      const employeeFolders = companyEmployees.map(employee => {
+        const employeeDocs = documentCache.get(employee.employee_id || '') || [];
+        return {
+          id: employee.employee_id || '', name: employee.name, trade: employee.trade,
+          documents: employeeDocs, documentCount: employeeDocs.length,
+          totalSize: employeeDocs.reduce((acc, doc) => acc + (doc.fileSize || 0), 0),
+        };
+      });
+      return {
+        name: companyName, employees: employeeFolders,
+        documentCount: employeeFolders.reduce((acc, ef) => acc + ef.documentCount, 0),
+        totalSize: employeeFolders.reduce((acc, ef) => acc + ef.totalSize, 0),
+      };
+    });
+  }, [employees, documentCache]);
+
+  const getCurrentViewData = () => {
+    if (!currentFolder) {
+      // Root view - show company folders and custom folders
+      const filteredCompanies = companyFolders.filter(company => 
+        company.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      const filteredCustomFolders = customFolders.filter(folder => 
+        folder.parentId === null && 
+        folder.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      return { folders: [...filteredCompanies, ...filteredCustomFolders], documents: [] };
+    }
+    
+    // Check if current folder is a company
+    const company = companyFolders.find(c => c.name === currentFolder);
+    if (company) {
+      const filteredEmployees = company.employees.filter(emp => 
+        emp.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      return { folders: filteredEmployees, documents: [] };
+    }
+    
+    // Check if current folder is an employee
+    const allEmployees = companyFolders.flatMap(c => c.employees);
+    const employee = allEmployees.find(e => e.id === currentFolder);
+    if (employee) {
+      const filteredDocs = employee.documents.filter(doc => 
+        doc.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      return { folders: [], documents: filteredDocs };
+    }
+    
+    // Custom folder
+    const customFolder = customFolders.find(f => f.id === currentFolder);
+    if (customFolder) {
+      const filteredDocs = customFolder.documents.filter(doc => 
+        doc.fileName.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      const filteredSubfolders = customFolder.subfolders.filter(folder => 
+        folder.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      return { folders: filteredSubfolders, documents: filteredDocs };
+    }
+    
+    return { folders: [], documents: [] };
+  };
+
+  const navigateToFolder = (folderId: string, folderName: string) => {
+    setBreadcrumb(prev => [...prev, folderName]);
+    setCurrentFolder(folderId);
+  };
+
+  const navigateBack = () => {
+    if (breadcrumb.length > 0) {
+      const newBreadcrumb = [...breadcrumb];
+      newBreadcrumb.pop();
+      setBreadcrumb(newBreadcrumb);
+      
+      if (newBreadcrumb.length === 0) {
+        setCurrentFolder(null);
+      } else {
+        // Navigate to parent folder - this is simplified logic
+        setCurrentFolder(null); // For now, just go back to root
+      }
+    }
+  };
+
+  const createNewFolder = async () => {
+    if (!newFolderName.trim()) {
+      setSnackbar('Folder name cannot be empty');
+      return;
+    }
+    const newFolder: CustomFolder = {
+      id: `folder-${Date.now()}`,
+      name: newFolderName.trim(),
+      parentId: currentFolder,
+      type: 'custom',
+      documents: [],
+      subfolders: [],
+      documentCount: 0,
+      totalSize: 0,
+      createdAt: new Date(),
+    };
+    setCustomFolders(prev => [...prev, newFolder]);
+    setNewFolderModalVisible(false);
+    setNewFolderName('');
+    setSnackbar(`Folder "${newFolderName}" created successfully`);
+  };
+
+  const renderCompanyTile = (company: CompanyFolder) => (
+    <TouchableOpacity 
+      key={company.name}
+      style={[styles.tile, { backgroundColor: theme.colors.surface }]}
+      onPress={() => navigateToFolder(company.name, company.name)}
+    >
+      <View style={styles.tileContent}>
+        <View style={styles.tileIcon}>
           <IconButton
-            icon={getDocumentTypeIcon(document.documentType)}
-            size={32}
-            iconColor={theme.colors.primary}
-            style={[styles.documentTypeIcon, { backgroundColor: `${theme.colors.primary}20` }]}
+            icon="folder-multiple"
+            size={48}
+            iconColor={CONSISTENT_COLORS.folder}
+            style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
           />
         </View>
+        <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
+          {company.name}
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {company.employees.length} employees
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {company.documentCount} documents
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
 
-        <View style={styles.documentDetails}>
-          <Chip
-            mode="outlined"
-            style={{ backgroundColor: `${theme.colors.primary}15` }}
-            textStyle={{ color: theme.colors.primary, textTransform: 'capitalize' }}
-          >
-            {document.documentType.replace('_', ' ')}
-          </Chip>
+  const renderEmployeeTile = (employee: EmployeeFolder) => (
+    <TouchableOpacity 
+      key={employee.id}
+      style={[styles.tile, { backgroundColor: theme.colors.surface }]}
+      onPress={() => navigateToFolder(employee.id, employee.name)}
+    >
+      <View style={styles.tileContent}>
+        <View style={styles.tileIcon}>
+          <IconButton
+            icon="folder-account"
+            size={48}
+            iconColor={CONSISTENT_COLORS.folder}
+            style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
+          />
         </View>
-      </Card.Content>
-
-      <Card.Actions>
-        <Button
-          mode="outlined"
-          onPress={() => handleDownload(document)}
-          icon="download"
-          compact
-        >
-          Download
-        </Button>
-        <Button
-          mode="text"
-          onPress={() => handleDelete(document)}
-          icon="delete"
-          textColor={theme.colors.error}
-          compact
-        >
-          Delete
-        </Button>
-      </Card.Actions>
-    </Card>
+        <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
+          {employee.name}
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {employee.trade}
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {employee.documentCount} documents
+        </Text>
+      </View>
+    </TouchableOpacity>
   );
 
-  const renderTableView = () => (
-    <Surface style={[styles.tableContainer, { backgroundColor: theme.colors.surface }]} elevation={1}>
-      <DataTable>
-        <DataTable.Header>
-          <DataTable.Title>Document</DataTable.Title>
-          <DataTable.Title>Employee</DataTable.Title>
-          <DataTable.Title>Type</DataTable.Title>
-          <DataTable.Title>Size</DataTable.Title>
-          <DataTable.Title>Actions</DataTable.Title>
-        </DataTable.Header>
+  const renderDocumentTile = (document: Document) => {
+    const fileIcon = getFileIcon(document.fileName);
+    
+    return (
+      <TouchableOpacity 
+        key={document.id}
+        style={[styles.tile, { backgroundColor: theme.colors.surface }]}
+        onPress={() => {
+          // Handle document opening
+          setSnackbar(`Opening ${document.fileName}`);
+        }}
+      >
+        <View style={styles.tileContent}>
+          <View style={styles.tileIcon}>
+            <IconButton
+              icon={fileIcon}
+              size={48}
+              iconColor={CONSISTENT_COLORS.document}
+              style={{ backgroundColor: CONSISTENT_COLORS.document + '15' }}
+            />
+          </View>
+          <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
+            {document.fileName}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {document.employeeName}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {formatFileSize(document.fileSize)}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {document.uploadDate.toLocaleDateString()}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
-        {filteredDocuments.map((document) => (
-          <DataTable.Row key={document.id}>
-            <DataTable.Cell>
-              <View>
-                <Text style={{ color: theme.colors.onSurface, fontWeight: 'bold' }}>
-                  {document.fileName}
-                </Text>
-                <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-                  {document.uploadDate.toLocaleDateString()}
-                </Text>
-              </View>
-            </DataTable.Cell>
-            <DataTable.Cell onPress={() => router.push(`/(admin)/employees/${document.employeeId}`)}>
-              <Text style={{ color: theme.colors.primary }}>
-                {document.employeeName}
-              </Text>
-            </DataTable.Cell>
-            <DataTable.Cell>
-              <Chip
-                mode="outlined"
-                compact
-                style={{ backgroundColor: `${theme.colors.primary}15` }}
-                textStyle={{ color: theme.colors.primary, fontSize: 12, textTransform: 'capitalize' }}
-              >
-                {document.documentType.replace('_', ' ')}
-              </Chip>
-            </DataTable.Cell>
-            <DataTable.Cell>
-              {formatFileSize(document.fileSize)}
-            </DataTable.Cell>
-            <DataTable.Cell>
-              <View style={styles.tableActions}>
-                <IconButton
-                  icon="download"
-                  size={18}
-                  onPress={() => handleDownload(document)}
-                />
-                <IconButton
-                  icon="delete"
-                  size={18}
-                  iconColor={theme.colors.error}
-                  onPress={() => handleDelete(document)}
-                />
-              </View>
-            </DataTable.Cell>
-          </DataTable.Row>
+  const renderCustomFolderTile = (folder: CustomFolder) => (
+    <TouchableOpacity 
+      key={folder.id}
+      style={[styles.tile, { backgroundColor: theme.colors.surface }]}
+      onPress={() => navigateToFolder(folder.id, folder.name)}
+    >
+      <View style={styles.tileContent}>
+        <View style={styles.tileIcon}>
+          <IconButton
+            icon="folder"
+            size={48}
+            iconColor={CONSISTENT_COLORS.folder}
+            style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
+          />
+        </View>
+        <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
+          {folder.name}
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {folder.documentCount} documents
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {formatFileSize(folder.totalSize)}
+        </Text>
+        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+          {folder.createdAt.toLocaleDateString()}
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderBreadcrumb = () => {
+    if (breadcrumb.length === 0) return null;
+    
+    return (
+      <View style={styles.breadcrumbContainer}>
+        <TouchableOpacity onPress={() => { setCurrentFolder(null); setBreadcrumb([]); }}>
+          <Text style={styles.breadcrumbItem}>Documents</Text>
+        </TouchableOpacity>
+        {breadcrumb.map((item, index) => (
+          <React.Fragment key={index}>
+            <Text style={styles.breadcrumbSeparator}> / </Text>
+            <Text style={styles.breadcrumbItem}>{item}</Text>
+          </React.Fragment>
         ))}
-      </DataTable>
-    </Surface>
-  );
+      </View>
+    );
+  };
 
-  const selectedEmployeeName = employees?.find(emp => emp.id === selectedEmployee)?.name || 'All Employees';
+  const { folders, documents: currentDocuments } = getCurrentViewData();
 
   return (
     <AdminLayout title="Documents" currentRoute="/admin/documents">
       <View style={styles.container}>
-        {/* Header Controls */}
-        <Surface style={[styles.headerControls, { backgroundColor: theme.colors.surface }]} elevation={1}>
+        <Surface style={styles.headerSurface} elevation={2}>
           <Searchbar
-            placeholder="Search documents by name, employee, or type..."
+            placeholder="Search..."
             onChangeText={setSearchQuery}
             value={searchQuery}
-            style={styles.searchBar}
+            style={styles.searchbar}
           />
-          
-          <View style={styles.filterRow}>
-            <View style={styles.filterControls}>
-              <Menu
-                visible={employeeMenuVisible}
-                onDismiss={() => setEmployeeMenuVisible(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setEmployeeMenuVisible(true)}
-                    icon="chevron-down"
-                    style={styles.filterButton}
-                  >
-                    {selectedEmployeeName}
-                  </Button>
-                }
-              >
-                <Menu.Item
-                  onPress={() => {
-                    setSelectedEmployee('');
-                    setEmployeeMenuVisible(false);
-                  }}
-                  title="All Employees"
-                  leadingIcon={selectedEmployee === '' ? 'check' : undefined}
-                />
-                <Divider />
-                {employees.map((employee) => (
-                  <Menu.Item
-                    key={employee.id}
-                    onPress={() => {
-                      setSelectedEmployee(employee.id);
-                      setEmployeeMenuVisible(false);
-                    }}
-                    title={employee.name}
-                    leadingIcon={selectedEmployee === employee.id ? 'check' : undefined}
-                  />
-                ))}
-              </Menu>
-
-              <Menu
-                visible={documentTypeMenuVisible}
-                onDismiss={() => setDocumentTypeMenuVisible(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setDocumentTypeMenuVisible(true)}
-                    icon="chevron-down"
-                    style={styles.filterButton}
-                  >
-                    {selectedDocumentType === 'all' ? 'All Types' : selectedDocumentType.replace('_', ' ')}
-                  </Button>
-                }
-              >
-                <Menu.Item
-                  onPress={() => {
-                    setSelectedDocumentType('all');
-                    setDocumentTypeMenuVisible(false);
-                  }}
-                  title="All Types"
-                  leadingIcon={selectedDocumentType === 'all' ? 'check' : undefined}
-                />
-                <Divider />
-                {DOCUMENT_TYPES.map((type) => (
-                  <Menu.Item
-                    key={type}
-                    onPress={() => {
-                      setSelectedDocumentType(type);
-                      setDocumentTypeMenuVisible(false);
-                    }}
-                    title={type.replace('_', ' ').toUpperCase()}
-                    leadingIcon={selectedDocumentType === type ? 'check' : undefined}
-                  />
-                ))}
-              </Menu>
-            </View>
-
-            <View style={styles.viewControls}>
-              <IconButton
-                icon={viewMode === 'grid' ? 'view-grid' : 'view-list'}
-                selected={viewMode === 'grid'}
-                onPress={() => setViewMode(viewMode === 'grid' ? 'table' : 'grid')}
-              />
-            </View>
-          </View>
-        </Surface>
-
-        {/* Content */}
-        <ScrollView style={styles.content}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
-                Loading documents...
-              </Text>
-            </View>
-          ) : error ? (
-            <View style={styles.errorContainer}>
-              <Text variant="bodyMedium" style={{ color: theme.colors.error, textAlign: 'center' }}>
-                {error}
-              </Text>
-              <Button mode="outlined" onPress={loadDocuments} style={{ marginTop: 16 }}>
-                Retry
-              </Button>
-            </View>
-          ) : filteredDocuments.length > 0 ? (
-            viewMode === 'grid' ? (
-              <View style={styles.documentsGrid}>
-                {filteredDocuments.map(renderDocumentCard)}
-              </View>
-            ) : (
-              renderTableView()
-            )
-          ) : (
-            <View style={styles.emptyState}>
-              <IconButton icon="file-document-multiple" size={64} iconColor={theme.colors.onSurfaceVariant} />
-              <Text variant="headlineSmall" style={{ color: theme.colors.onSurface, marginTop: 16 }}>
-                No documents found
-              </Text>
-              <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, textAlign: 'center', marginTop: 8 }}>
-                {searchQuery || selectedEmployee || selectedDocumentType !== 'all' 
-                  ? 'Try adjusting your filters' 
-                  : 'Upload your first document to get started'}
-              </Text>
-              <Button
-                mode="contained"
-                onPress={() => setUploadModalVisible(true)}
-                style={{ marginTop: 24 }}
-                icon="plus"
-              >
-                Upload Document
-              </Button>
-            </View>
+          {renderBreadcrumb()}
+          {breadcrumb.length > 0 && (
+            <Button 
+              mode="outlined" 
+              onPress={navigateBack}
+              icon="arrow-left"
+              style={styles.backButton}
+            >
+              Back
+            </Button>
           )}
-        </ScrollView>
+        </Surface>
+        
+        <View style={{flex: 1}}>
+          {loading ? (
+            <ActivityIndicator animating={true} style={{ flex: 1, justifyContent: 'center' }} />
+          ) : (
+            <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
+              {(folders.length === 0 && currentDocuments.length === 0) && !loading ? (
+                <View style={styles.emptyState}>
+                  <Text>No items found.</Text>
+                </View>
+              ) : (
+                <View style={styles.gridContainer}>
+                  {folders.map(item => {
+                    if ('employees' in item) {
+                      return renderCompanyTile(item as CompanyFolder);
+                    } else if ('trade' in item) {
+                      return renderEmployeeTile(item as EmployeeFolder);
+                    } else {
+                      return renderCustomFolderTile(item as CustomFolder);
+                    }
+                  })}
+                  {currentDocuments.map(doc => renderDocumentTile(doc))}
+                </View>
+              )}
+            </ScrollView>
+          )}
+        </View>
 
-        {/* Upload FAB */}
-        <FAB
-          icon="plus"
-          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-          onPress={() => setUploadModalVisible(true)}
-          label="Upload"
-        />
-
-        {/* Upload Modal */}
         <Portal>
-          <Modal
-            visible={uploadModalVisible}
-            onDismiss={() => setUploadModalVisible(false)}
-            contentContainerStyle={styles.modalContainer}
-          >
-            <Surface style={styles.modal} elevation={5}>
-              <Text variant="headlineSmall" style={{ marginBottom: 20, fontWeight: 'bold' }}>
-                Upload Document
-              </Text>
-              
-              <ScrollView style={styles.modalContent}>
-                <Text variant="bodyMedium" style={{ marginBottom: 8, color: theme.colors.onSurface }}>
-                  Employee *
-                </Text>
-                <Menu
-                  visible={false}
-                  onDismiss={() => {}}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => {}}
-                      style={styles.input}
-                    >
-                      {employees.find(emp => emp.id === uploadEmployee)?.name || 'Select Employee'}
-                    </Button>
-                  }
-                >
-                  {employees.map((employee) => (
-                    <Menu.Item
-                      key={employee.id}
-                      onPress={() => setUploadEmployee(employee.id)}
-                      title={employee.name}
-                    />
-                  ))}
-                </Menu>
-                
-                {/* Simple dropdown replacement */}
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Select Employee:
-                </Text>
-                <ScrollView style={styles.employeeList}>
-                  {employees.map((employee) => (
-                    <Button
-                      key={employee.id}
-                      mode={uploadEmployee === employee.id ? 'contained' : 'outlined'}
-                      onPress={() => setUploadEmployee(employee.id)}
-                      style={{ marginBottom: 8 }}
-                    >
-                      {employee.name}
-                    </Button>
-                  ))}
-                </ScrollView>
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Document Type *
-                </Text>
-                <ScrollView style={styles.documentTypeList} horizontal showsHorizontalScrollIndicator={false}>
-                  {DOCUMENT_TYPES.map((type) => (
-                    <Chip
-                      key={type}
-                      selected={uploadDocumentType === type}
-                      onPress={() => setUploadDocumentType(type)}
-                      style={{ marginRight: 8 }}
-                    >
-                      {type.replace('_', ' ').toUpperCase()}
-                    </Chip>
-                  ))}
-                </ScrollView>
-
-                <TextInput
-                  label="Custom File Name (optional)"
-                  value={uploadFileName}
-                  onChangeText={setUploadFileName}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty to use original filename"
-                />
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  {uploadDocumentType === 'visa' ? 'Visa Expiry Date (Required for Visa) *' : 'Expiry Date (optional)'}
-                </Text>
-                <TextInput
-                  label={uploadDocumentType === 'visa' ? 'Visa Expiry Date *' : 'Expiry Date'}
-                  value={uploadExpiryDate}
-                  onChangeText={setUploadExpiryDate}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder={uploadDocumentType === 'visa' ? 'DD-MM-YYYY (Required for visa tracking)' : 'Leave empty if not applicable'}
-                  error={uploadDocumentType === 'visa' && !uploadExpiryDate}
-                  left={<TextInput.Icon icon="calendar" />}
-                />
-                {uploadDocumentType === 'visa' && !uploadExpiryDate && (
-                  <Text style={{ color: theme.colors.error, fontSize: 12, marginTop: 4, marginLeft: 12 }}>
-                    Visa expiry date is required for automated visa expiry notifications
-                  </Text>
-                )}
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Document Number (optional)
-                </Text>
-                <TextInput
-                  label="Document Number"
-                  value={uploadDocumentNumber}
-                  onChangeText={setUploadDocumentNumber}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty if not applicable"
-                />
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Issuing Authority (optional)
-                </Text>
-                <TextInput
-                  label="Issuing Authority"
-                  value={uploadIssuingAuthority}
-                  onChangeText={setUploadIssuingAuthority}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty if not applicable"
-                />
-
-                <Text variant="bodyMedium" style={{ marginBottom: 8, marginTop: 16, color: theme.colors.onSurface }}>
-                  Notes (optional)
-                </Text>
-                <TextInput
-                  label="Notes"
-                  value={uploadNotes}
-                  onChangeText={setUploadNotes}
-                  style={styles.input}
-                  mode="outlined"
-                  placeholder="Leave empty if not applicable"
-                />
-              </ScrollView>
-
-              <View style={styles.modalActions}>
-                <Button
-                  mode="outlined"
-                  onPress={() => {
-                    setUploadModalVisible(false);
-                    resetUploadForm();
-                  }}
-                  style={{ flex: 1, marginRight: 8 }}
-                >
-                  Cancel
-                </Button>
-        <Button
-          mode="contained"
-          onPress={handleUpload}
-          loading={uploading}
-                  disabled={uploading || !uploadEmployee || (uploadDocumentType === 'visa' && !uploadExpiryDate)}
-                  style={{ flex: 1, marginLeft: 8 }}
-                  icon="upload"
-                >
-                  Upload
-                </Button>
-              </View>
-            </Surface>
+          <FAB
+            icon="folder-plus"
+            style={styles.fab}
+            onPress={() => setNewFolderModalVisible(true)}
+            label="New Folder"
+          />
+        </Portal>
+        
+        <Portal>
+          <Modal visible={newFolderModalVisible} onDismiss={() => setNewFolderModalVisible(false)} contentContainerStyle={styles.modalContainerStyle}>
+              <Card style={styles.modalCardStyle}>
+                <Card.Title title="Create New Folder" />
+                <Card.Content>
+                  <TextInput 
+                    label="Folder Name" 
+                    value={newFolderName} 
+                    onChangeText={setNewFolderName} 
+                    mode="outlined" 
+                  />
+                </Card.Content>
+                <Card.Actions>
+                  <Button onPress={() => setNewFolderModalVisible(false)}>Cancel</Button>
+                  <Button onPress={createNewFolder} mode="contained">Create</Button>
+                </Card.Actions>
+              </Card>
           </Modal>
         </Portal>
 
@@ -749,122 +555,85 @@ export default function AdminDocumentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  headerControls: {
-    padding: 16,
-  },
-  searchBar: {
-    marginBottom: 16,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  filterControls: {
-    flexDirection: 'row',
-    flex: 1,
-    gap: 8,
-  },
-  filterButton: {
-    marginRight: 8,
-  },
-  viewControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  documentsGrid: {
-    gap: 16,
-    paddingBottom: 100,
-  },
-  documentCard: {
-    borderRadius: 12,
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  headerSurface: { padding: 12, backgroundColor: 'white' },
+  searchbar: { marginBottom: 12 },
+  breadcrumbContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
     marginBottom: 8,
+    paddingHorizontal: 4,
   },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+  breadcrumbItem: { 
+    fontSize: 14, 
+    color: '#1976D2',
+    fontWeight: '500',
   },
-  documentInfo: {
-    flex: 1,
+  breadcrumbSeparator: { 
+    fontSize: 14, 
+    color: '#666',
+    marginHorizontal: 4,
   },
-  documentTypeIcon: {
-    marginLeft: 8,
-    borderRadius: 16,
-  },
-  documentDetails: {
+  backButton: {
     marginTop: 8,
+    alignSelf: 'flex-start',
   },
-  tableContainer: {
-    borderRadius: 12,
-    paddingBottom: 100,
+  content: { flex: 1 },
+  gridContainer: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    padding: 16, 
+    justifyContent: 'space-around',
   },
-  tableActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  fab: {
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, minHeight: 200 },
+  fab: { 
     position: 'absolute',
-    right: 16,
-    bottom: 16,
+    margin: 16,
+    right: 0,
+    bottom: 0,
+    backgroundColor: CONSISTENT_COLORS.primary,
   },
-  modalContainer: {
+  modalContainerStyle: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalCardStyle: { width: '90%', maxWidth: 500 },
+  tile: {
+    width: 170,
+    height: 220,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    marginBottom: 16,
+    marginRight: 16,
+  },
+  tileContent: {
     flex: 1,
-    justifyContent: 'center',
+    padding: 12,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    padding: 20,
+    justifyContent: 'space-between',
   },
-  modal: {
-    width: '100%',
-    maxWidth: 600,
-    maxHeight: '90%',
-    padding: 24,
-    borderRadius: 16,
+  tileIcon: {
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  modalContent: {
-    maxHeight: 400,
+  tileName: {
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    height: 54, // Fixed height for 3 lines
+    paddingHorizontal: 4,
   },
-  input: {
-    marginBottom: 16,
+  tileInfo: {
+    textAlign: 'center',
+    marginBottom: 3,
+    fontSize: 11,
+    lineHeight: 14,
+    paddingHorizontal: 2,
   },
-  employeeList: {
-    maxHeight: 120,
-    marginBottom: 16,
-  },
-  documentTypeList: {
-    marginBottom: 16,
-    paddingVertical: 8,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    marginTop: 24,
-  },
-}); 
+});
 
+export default AdminDocumentsScreen;

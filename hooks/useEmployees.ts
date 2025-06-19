@@ -19,11 +19,14 @@ interface EmployeesState {
   fetchEmployees: () => Promise<void>;
   refreshEmployees: () => Promise<void>;
   addEmployee: (employeeData: any) => Promise<Employee>;
-  fetchEmployeeById: (id: string) => Promise<Employee | null>;
-  fetchEmployeesByCompany: (companyId: string) => Promise<Employee[]>;
+  fetchEmployeeById: (employeeId: string) => Promise<Employee | null>;
+  fetchEmployeeByDatabaseId: (databaseId: string) => Promise<Employee | null>;
+  fetchEmployeesByCompany: (companyName: string) => Promise<Employee[]>;
   createEmployee: (employeeData: CreateEmployeeData) => Promise<Employee>;
-  updateEmployee: (id: string, employeeData: UpdateEmployeeData) => Promise<Employee>;
-  deleteEmployee: (id: string) => Promise<void>;
+  updateEmployee: (employeeId: string, employeeData: UpdateEmployeeData) => Promise<Employee>;
+  updateEmployeeByDatabaseId: (databaseId: string, employeeData: UpdateEmployeeData) => Promise<Employee>;
+  deleteEmployee: (employeeId: string) => Promise<void>;
+  deleteEmployeeByDatabaseId: (databaseId: string) => Promise<void>;
   searchEmployees: (searchTerm: string) => Promise<Employee[]>;
   getEmployeesWithExpiringVisas: (daysThreshold?: number) => Promise<Employee[]>;
   bulkImportEmployees: (employees: CreateEmployeeData[]) => Promise<Employee[]>;
@@ -67,10 +70,10 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
     return get().createEmployee(employeeData);
   },
 
-  fetchEmployeeById: async (id: string) => {
+  fetchEmployeeById: async (employeeId: string) => {
     try {
       set({ error: null });
-      const employee = await employeeService.getEmployeeById(id);
+      const employee = await employeeService.getEmployeeById(employeeId);
       return employee;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employee';
@@ -80,10 +83,23 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
     }
   },
 
-  fetchEmployeesByCompany: async (companyId: string) => {
+  fetchEmployeeByDatabaseId: async (databaseId: string) => {
     try {
       set({ error: null });
-      const employees = await employeeService.getEmployeesByCompany(companyId);
+      const employee = await employeeService.getEmployeeByDatabaseId(databaseId);
+      return employee;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employee by database ID';
+      console.error('Error fetching employee by database ID:', error);
+      set({ error: errorMessage });
+      throw error;
+    }
+  },
+
+  fetchEmployeesByCompany: async (companyName: string) => {
+    try {
+      set({ error: null });
+      const employees = await employeeService.getEmployeesByCompany(companyName);
       return employees;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch employees by company';
@@ -117,15 +133,15 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
     }
   },
 
-  updateEmployee: async (id: string, employeeData: UpdateEmployeeData) => {
+  updateEmployee: async (employeeId: string, employeeData: UpdateEmployeeData) => {
     try {
       set({ isLoading: true, error: null });
-      const updatedEmployee = await employeeService.updateEmployee(id, employeeData);
+      const updatedEmployee = await employeeService.updateEmployee(employeeId, employeeData);
       
       // Update local state
       const currentEmployees = get().employees;
       const updatedEmployees = currentEmployees.map(emp => 
-        emp.id === id ? updatedEmployee : emp
+        emp.employee_id === employeeId ? updatedEmployee : emp
       );
       set({ 
         employees: updatedEmployees,
@@ -144,14 +160,41 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
     }
   },
 
-  deleteEmployee: async (id: string) => {
+  updateEmployeeByDatabaseId: async (databaseId: string, employeeData: UpdateEmployeeData) => {
     try {
       set({ isLoading: true, error: null });
-      await employeeService.deleteEmployee(id);
+      const updatedEmployee = await employeeService.updateEmployeeByDatabaseId(databaseId, employeeData);
       
       // Update local state
       const currentEmployees = get().employees;
-      const filteredEmployees = currentEmployees.filter(emp => emp.id !== id);
+      const updatedEmployees = currentEmployees.map(emp => 
+        emp.id === databaseId ? updatedEmployee : emp
+      );
+      set({ 
+        employees: updatedEmployees,
+        isLoading: false 
+      });
+      
+      // Refresh stats
+      get().fetchStats();
+      
+      return updatedEmployee;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update employee by database ID';
+      console.error('Error updating employee by database ID:', error);
+      set({ error: errorMessage, isLoading: false });
+      throw error;
+    }
+  },
+
+  deleteEmployee: async (employeeId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      await employeeService.deleteEmployee(employeeId);
+      
+      // Update local state
+      const currentEmployees = get().employees;
+      const filteredEmployees = currentEmployees.filter(emp => emp.employee_id !== employeeId);
       set({ 
         employees: filteredEmployees,
         isLoading: false 
@@ -162,6 +205,29 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete employee';
       console.error('Error deleting employee:', error);
+      set({ error: errorMessage, isLoading: false });
+      throw error;
+    }
+  },
+
+  deleteEmployeeByDatabaseId: async (databaseId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      await employeeService.deleteEmployeeByDatabaseId(databaseId);
+      
+      // Update local state
+      const currentEmployees = get().employees;
+      const filteredEmployees = currentEmployees.filter(emp => emp.id !== databaseId);
+      set({ 
+        employees: filteredEmployees,
+        isLoading: false 
+      });
+      
+      // Refresh stats
+      get().fetchStats();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete employee by database ID';
+      console.error('Error deleting employee by database ID:', error);
       set({ error: errorMessage, isLoading: false });
       throw error;
     }

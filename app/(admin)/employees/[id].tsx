@@ -59,16 +59,19 @@ const validationSchema = Yup.object().shape({
   join_date: Yup.string().required('Joining date is required'),
   date_of_birth: Yup.string().required('Date of birth is required'),
   mobile_number: Yup.string().required('Mobile number is required'),
+  home_phone_number: Yup.string(),
   email_id: Yup.string().email('Invalid email').required('Email is required'),
+  company_id: Yup.string(),
   company_name: Yup.string().required('Company is required'),
   visa_expiry_date: Yup.string(),
-  passport_number: Yup.string(),
+  passport_no: Yup.string(),
+  status: Yup.string(),
 });
 
 export default function EmployeeDetailsScreen() {
   const theme = useTheme() as CustomTheme;
   const { id } = useLocalSearchParams();
-  const { employees, updateEmployee, deleteEmployee, refreshEmployees } = useEmployees();
+  const { employees, updateEmployee, updateEmployeeByDatabaseId, deleteEmployee, deleteEmployeeByDatabaseId, refreshEmployees, fetchEmployeeByDatabaseId, fetchEmployeeById } = useEmployees();
   
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,11 +87,17 @@ export default function EmployeeDetailsScreen() {
     nationality: '',
     date_of_birth: '',
     mobile_number: '',
+    home_phone_number: '',
     email_id: '',
+    company_id: '',
     company_name: '',
     join_date: '',
     visa_expiry_date: '',
-    passport_number: '',
+    passport_no: '',
+    labourcard_no: '',
+    eid: '',
+    wcc: '',
+    status: 'Active',
     is_active: true,
     visa_status: 'ACTIVE',
   });
@@ -100,12 +109,95 @@ export default function EmployeeDetailsScreen() {
   const [companyMenuVisible, setCompanyMenuVisible] = useState(false);
 
   useEffect(() => {
-    loadEmployee();
-  }, [id, employees]);
+    const loadEmployeeData = async () => {
+      try {
+        // First try to fetch by employee_id (which is what we pass from navigation)
+        console.log('Trying to fetch employee by employee_id:', id);
+        const employeeByEmployeeId = await fetchEmployeeById(id as string);
+        if (employeeByEmployeeId) {
+          console.log('Found employee by employee_id:', employeeByEmployeeId);
+          setEmployee(employeeByEmployeeId);
+          setFormData({
+            name: employeeByEmployeeId.name || '',
+            employee_id: employeeByEmployeeId.employee_id || '',
+            trade: employeeByEmployeeId.trade || '',
+            nationality: employeeByEmployeeId.nationality || '',
+            date_of_birth: formatDateDDMMYYYY(employeeByEmployeeId.date_of_birth || employeeByEmployeeId.dob || ''),
+            mobile_number: employeeByEmployeeId.mobile_number || '',
+            home_phone_number: employeeByEmployeeId.home_phone_number || '',
+            email_id: employeeByEmployeeId.email_id || '',
+            company_id: employeeByEmployeeId.company_id || '',
+            company_name: employeeByEmployeeId.company_name || '',
+            join_date: formatDateDDMMYYYY(employeeByEmployeeId.join_date || employeeByEmployeeId.joining_date || ''),
+            visa_expiry_date: formatDateDDMMYYYY(employeeByEmployeeId.visa_expiry_date || ''),
+            passport_no: employeeByEmployeeId.passport_no || employeeByEmployeeId.passport_number || '',
+            labourcard_no: employeeByEmployeeId.labourcard_no || '',
+            eid: employeeByEmployeeId.eid || '',
+            wcc: employeeByEmployeeId.wcc || '',
+            status: employeeByEmployeeId.status || 'Active',
+            is_active: employeeByEmployeeId.is_active ?? true,
+            visa_status: getVisaStatusFromDate(employeeByEmployeeId.visa_expiry_date || ''),
+          });
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Error fetching employee by employee_id:', error);
+      }
+
+      // Fallback: Try to fetch by database ID
+      try {
+        console.log('Trying to fetch employee by database ID:', id);
+        const directEmployee = await fetchEmployeeByDatabaseId(id as string);
+        if (directEmployee) {
+          console.log('Found employee by database ID:', directEmployee);
+          setEmployee(directEmployee);
+          setFormData({
+            name: directEmployee.name || '',
+            employee_id: directEmployee.employee_id || '',
+            trade: directEmployee.trade || '',
+            nationality: directEmployee.nationality || '',
+            date_of_birth: formatDateDDMMYYYY(directEmployee.date_of_birth || directEmployee.dob || ''),
+            mobile_number: directEmployee.mobile_number || '',
+            home_phone_number: directEmployee.home_phone_number || '',
+            email_id: directEmployee.email_id || '',
+            company_id: directEmployee.company_id || '',
+            company_name: directEmployee.company_name || '',
+            join_date: formatDateDDMMYYYY(directEmployee.join_date || directEmployee.joining_date || ''),
+            visa_expiry_date: formatDateDDMMYYYY(directEmployee.visa_expiry_date || ''),
+            passport_no: directEmployee.passport_no || directEmployee.passport_number || '',
+            labourcard_no: directEmployee.labourcard_no || '',
+            eid: directEmployee.eid || '',
+            wcc: directEmployee.wcc || '',
+            status: directEmployee.status || 'Active',
+            is_active: directEmployee.is_active ?? true,
+            visa_status: getVisaStatusFromDate(directEmployee.visa_expiry_date || ''),
+          });
+          setLoading(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Error fetching employee by database ID:', error);
+      }
+
+      // Final fallback: Use loaded employees array
+      if (!employees || employees.length === 0) {
+        console.log('No employees loaded, refreshing...');
+        await refreshEmployees();
+      }
+      loadEmployee();
+    };
+
+    loadEmployeeData();
+  }, [id]);
 
   const loadEmployee = () => {
     setLoading(true);
-    const foundEmployee = employees?.find(emp => emp.id === id);
+    console.log('Loading employee with ID:', id);
+    console.log('Available employees:', employees?.length);
+    console.log('Employee IDs:', employees?.map(emp => emp.employee_id));
+    const foundEmployee = employees?.find(emp => emp.employee_id === id);
+    console.log('Found employee:', foundEmployee);
     if (foundEmployee) {
       setEmployee(foundEmployee);
       setFormData({
@@ -113,13 +205,19 @@ export default function EmployeeDetailsScreen() {
         employee_id: foundEmployee.employee_id || '',
         trade: foundEmployee.trade || '',
         nationality: foundEmployee.nationality || '',
-        date_of_birth: formatDateDDMMYYYY(foundEmployee.date_of_birth || ''),
+        date_of_birth: formatDateDDMMYYYY(foundEmployee.date_of_birth || foundEmployee.dob || ''),
         mobile_number: foundEmployee.mobile_number || '',
+        home_phone_number: foundEmployee.home_phone_number || '',
         email_id: foundEmployee.email_id || '',
+        company_id: foundEmployee.company_id || '',
         company_name: foundEmployee.company_name || '',
-        join_date: formatDateDDMMYYYY(foundEmployee.join_date || ''),
+        join_date: formatDateDDMMYYYY(foundEmployee.join_date || foundEmployee.joining_date || ''),
         visa_expiry_date: formatDateDDMMYYYY(foundEmployee.visa_expiry_date || ''),
-        passport_number: foundEmployee.passport_number || '',
+        passport_no: foundEmployee.passport_no || foundEmployee.passport_number || '',
+        labourcard_no: foundEmployee.labourcard_no || '',
+        eid: foundEmployee.eid || '',
+        wcc: foundEmployee.wcc || '',
+        status: foundEmployee.status || 'Active',
         is_active: foundEmployee.is_active ?? true,
         visa_status: getVisaStatusFromDate(foundEmployee.visa_expiry_date || ''),
       });
@@ -139,12 +237,21 @@ export default function EmployeeDetailsScreen() {
         join_date: values.join_date ? parseDDMMYYYY(values.join_date) || null : null,
         visa_expiry_date: values.visa_expiry_date ? parseDDMMYYYY(values.visa_expiry_date) || null : null,
         // Ensure other string fields are properly handled
-        passport_number: values.passport_number || null,
+        passport_no: values.passport_no || null,
         mobile_number: values.mobile_number || null,
+        home_phone_number: values.home_phone_number || null,
+        company_id: values.company_id || null,
+        status: values.status || 'Active',
       };
       
       console.log('Updating employee with validated data:', updateData);
-      await updateEmployee(employee.id, updateData);
+      // Try to update by employee_id first, fallback to database id
+      try {
+        await updateEmployee(employee.employee_id, updateData);
+      } catch (error) {
+        console.log('Fallback to database ID update');
+        await updateEmployeeByDatabaseId(employee.id, updateData);
+      }
       setSnackbar('Employee updated successfully!');
       setEditMode(false);
       await refreshEmployees();
@@ -159,7 +266,13 @@ export default function EmployeeDetailsScreen() {
     if (!employee) return;
     
     try {
-      await deleteEmployee(employee.id);
+      // Try to delete by employee_id first, fallback to database id
+      try {
+        await deleteEmployee(employee.employee_id);
+      } catch (error) {
+        console.log('Fallback to database ID delete');
+        await deleteEmployeeByDatabaseId(employee.id);
+      }
       setSnackbar('Employee deleted successfully');
       router.back();
     } catch (error) {

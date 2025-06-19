@@ -141,16 +141,13 @@ export default function AdminLayout({
       active: currentRoute.includes('approvals'),
       badge: '2', // Dynamic badge
     },
-    {
-      label: 'Import Data',
-      icon: 'database-import',
-      route: '/(admin)/import',
-      active: currentRoute.includes('import'),
-      badge: null,
-    },
   ];
 
   const handleNavigation = (route: string) => {
+    if (router.canGoBack() && route === currentRoute) {
+        setSidebarVisible(false);
+        return;
+    }
     router.push(route as any);
     if (isMobile) {
       setSidebarVisible(false);
@@ -160,8 +157,13 @@ export default function AdminLayout({
   const handleBackPress = () => {
     if (onBackPress) {
       onBackPress();
-    } else {
+    } else if (router.canGoBack()) {
       router.back();
+    } else {
+      // Fallback for web if router.back() is not available
+      if (Platform.OS === 'web') {
+        window.history.back();
+      }
     }
   };
 

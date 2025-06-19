@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, RefreshControl, Animated, Image, Platform, TouchableOpacity } from 'react-native';
-import { Text, Card, useTheme, Surface, Button, Chip, IconButton, ActivityIndicator, ProgressBar, Portal, Modal, Divider } from 'react-native-paper';
+import { Text, Card, useTheme, Surface, Button, Chip, IconButton, ActivityIndicator, ProgressBar, Portal, Modal, Divider, List } from 'react-native-paper';
 import { router } from 'expo-router';
 import { PieChart, BarChart, LineChart, ProgressChart, ContributionGraph } from 'react-native-chart-kit';
 import { useAuth } from '../../hooks/useAuth';
@@ -12,6 +12,8 @@ import { safeThemeAccess } from '../../utils/errorPrevention';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
+import { documentService } from '../../services/documentService';
+import { Employee } from '../../services/supabase';
 
 const { width } = Dimensions.get('window');
 const isMobile = width < 768;
@@ -29,17 +31,6 @@ interface TradeSummary {
   employee_count: number;
   companies: number;
   avg_days_to_expiry: number;
-}
-
-interface Employee {
-  id: string;
-  name: string;
-  email_id: string;
-  company_name?: string;
-  trade?: string;
-  department?: string;
-  visa_expiry_date?: string;
-  created_at: string;
 }
 
 interface VisaAlert {
@@ -64,6 +55,26 @@ interface DashboardStats {
   tradeSummary: TradeSummary[];
   visaAlerts: VisaAlert[];
 }
+
+interface StatCardProps {
+  icon: string;
+  label: string;
+  value: string;
+  color: string;
+  loading: boolean;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ icon, label, value, color, loading }) => (
+  <Card style={styles.statCard}>
+    <Card.Content style={styles.statCardContent}>
+      <List.Icon icon={icon} color={color} style={styles.statIcon} />
+      <View>
+        <Text style={styles.statLabel}>{label}</Text>
+        {loading ? <ActivityIndicator color={color} size="small" /> : <Text style={styles.statValue}>{value}</Text>}
+      </View>
+    </Card.Content>
+  </Card>
+);
 
 function AdminDashboard() {
   const theme = useTheme() as CustomTheme;
@@ -265,9 +276,9 @@ function AdminDashboard() {
     try {
       console.log('📊 Loading dashboard analytics...');
       
-      // Fetch employees data directly - this is the only table we know exists
+      // Fetch employees data from the correct table
       const { data: allEmployees, error: employeesError } = await supabase
-        .from('employees')
+        .from('employee_table')
         .select('*');
 
       if (employeesError) {
@@ -293,7 +304,7 @@ function AdminDashboard() {
           
           if (daysRemaining <= 30) {
             visaAlerts.push({
-              employeeId: employee.id,
+              employeeId: employee.employee_id || employee.id,
               employeeName: employee.name,
               expiryDate: employee.visa_expiry_date,
               daysRemaining,
@@ -378,7 +389,7 @@ function AdminDashboard() {
 
       // Calculate totals from real data
       const totalEmployees = employees.length;
-      const activeEmployees = totalEmployees; // All employees are considered active
+      const activeEmployees = employees.filter((e: any) => !e.leave_date).length;
       const totalCompanies = companySummary.length;
       const totalTrades = tradeSummary.length;
       const urgentRenewals = companySummary.reduce((sum, company) => sum + company.urgent_renewals, 0);
@@ -585,105 +596,6 @@ function AdminDashboard() {
   };
 
   // Enhanced Chart Components
-  const CompanyDistributionChart = () => {
-    const data = stats.companySummary.slice(0, 8).map((company, index) => ({
-      name: company.company.split(' ').slice(0, 2).join(' '), // Shorten names
-      population: company.total_employees,
-      color: CHART_COLORS.gradients[index % CHART_COLORS.gradients.length],
-      legendFontColor: CHART_COLORS.gray,
-      legendFontSize: 11,
-    }));
-
-    return (
-      <Surface style={[styles.chartContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
-        <View style={styles.chartHeader}>
-          <Text variant="titleLarge" style={[styles.chartTitle, { color: CHART_COLORS.primary }]}>
-            🏢 Company Distribution
-          </Text>
-          <Text variant="bodySmall" style={[styles.chartSubtitle, { color: CHART_COLORS.gray }]}>
-            Employee allocation across companies
-          </Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <PieChart
-            data={data}
-            width={isMobile ? 350 : 400}
-            height={220}
-            chartConfig={chartConfig}
-            accessor="population"
-            backgroundColor="transparent"
-            paddingLeft="15"
-            center={[10, 0]}
-            absolute
-          />
-        </ScrollView>
-        <TouchableOpacity 
-          style={styles.expandButton}
-          onPress={() => {
-            setSelectedChart('companies');
-            setShowChartsModal(true);
-          }}
-        >
-          <Text style={[styles.expandText, { color: CHART_COLORS.primary }]}>View Details →</Text>
-        </TouchableOpacity>
-      </Surface>
-    );
-  };
-
-  const TradeDistributionChart = () => {
-    const data = {
-      labels: stats.tradeSummary.slice(0, 6).map(trade => 
-        trade.trade.length > 8 ? trade.trade.substring(0, 8) + '...' : trade.trade
-      ),
-      datasets: [{
-        data: stats.tradeSummary.slice(0, 6).map(trade => trade.employee_count),
-        colors: stats.tradeSummary.slice(0, 6).map((_, index) => 
-          (opacity = 1) => CHART_COLORS.gradients[index % CHART_COLORS.gradients.length]
-        )
-      }]
-    };
-
-    return (
-      <Surface style={[styles.chartContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
-        <View style={styles.chartHeader}>
-          <Text variant="titleLarge" style={[styles.chartTitle, { color: CHART_COLORS.primary }]}>
-            🔧 Trade Distribution
-          </Text>
-          <Text variant="bodySmall" style={[styles.chartSubtitle, { color: CHART_COLORS.gray }]}>
-            Employee count by specialization
-          </Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <BarChart
-            data={data}
-            width={isMobile ? 350 : 400}
-            height={220}
-            yAxisLabel=""
-            yAxisSuffix=""
-            chartConfig={{
-              ...chartConfig,
-              backgroundGradientFrom: '#ffffff',
-              backgroundGradientTo: '#f8fafc',
-            }}
-            verticalLabelRotation={30}
-            showBarTops={false}
-            withCustomBarColorFromData={true}
-            flatColor={true}
-          />
-        </ScrollView>
-        <TouchableOpacity 
-          style={styles.expandButton}
-          onPress={() => {
-            setSelectedChart('trades');
-            setShowChartsModal(true);
-          }}
-        >
-          <Text style={[styles.expandText, { color: CHART_COLORS.primary }]}>View Details →</Text>
-        </TouchableOpacity>
-      </Surface>
-    );
-  };
-
   const VisaStatusChart = () => {
     const activeCount = stats.activeEmployees;
     const expiringCount = stats.expiringVisas;
@@ -745,6 +657,38 @@ function AdminDashboard() {
         >
           <Text style={[styles.expandText, { color: CHART_COLORS.primary }]}>View Details →</Text>
         </TouchableOpacity>
+      </Surface>
+    );
+  };
+
+  const CompanyDistributionChart = () => {
+    const data = stats.companySummary.slice(0, 8).map((company, index) => ({
+      name: company.company.split(' ').slice(0, 2).join(' '), // Shorten names
+      population: company.total_employees,
+      color: CHART_COLORS.gradients[index % CHART_COLORS.gradients.length],
+      legendFontColor: CHART_COLORS.gray,
+      legendFontSize: 11,
+    }));
+
+    return (
+      <Surface style={[styles.chartContainer, { backgroundColor: theme.colors.surface }]} elevation={4}>
+        <View style={styles.chartHeader}>
+          <Text variant="titleLarge" style={[styles.chartTitle, { color: CHART_COLORS.primary }]}>🏢 Company Distribution</Text>
+          <Text variant="bodySmall" style={[styles.chartSubtitle, { color: CHART_COLORS.gray }]}>Distribution of employees across companies</Text>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <PieChart
+            data={data}
+            width={isMobile ? 350 : 400}
+            height={220}
+            chartConfig={chartConfig}
+            accessor="population"
+            backgroundColor="transparent"
+            paddingLeft="15"
+            center={[10, 0]}
+            absolute
+          />
+        </ScrollView>
       </Surface>
     );
   };
@@ -1013,7 +957,6 @@ function AdminDashboard() {
 
         {/* Enhanced Chart Components */}
         <CompanyDistributionChart />
-        <TradeDistributionChart />
         <VisaStatusChart />
 
         <View style={{ height: 32 }} />

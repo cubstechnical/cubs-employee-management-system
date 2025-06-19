@@ -204,6 +204,8 @@ export default function LoginScreen() {
                     colors: {
                       primary: '#DC143C', // Ferrari Red
                       outline: '#DC143C',
+                      onSurface: '#000000', // Black text for visibility
+                      onSurfaceVariant: '#666666', // Gray text for labels
                     }
                   }}
                 />
@@ -226,6 +228,8 @@ export default function LoginScreen() {
                     colors: {
                       primary: '#DC143C', // Ferrari Red
                       outline: '#DC143C',
+                      onSurface: '#000000', // Black text for visibility
+                      onSurfaceVariant: '#666666', // Gray text for labels
                     }
                   }}
                 />
@@ -251,25 +255,6 @@ export default function LoginScreen() {
                     labelStyle={[styles.textButtonLabel, { color: theme.colors.primary }]}
                   >
                     Forgot Password?
-                  </Button>
-
-                  {/* Divider */}
-                  <View style={styles.dividerContainer}>
-                    <View style={styles.dividerLine} />
-                    <Text variant="bodySmall" style={styles.dividerText}>or</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-
-                  {/* Google Sign In */}
-                  <Button
-                    mode="outlined"
-                    onPress={() => Alert.alert('Google Sign In', 'Google authentication will be implemented')}
-                    style={[styles.googleButton, { borderColor: theme.colors.primary }]}
-                    labelStyle={[styles.googleButtonText, { color: theme.colors.primary }]}
-                    icon="google"
-                    contentStyle={styles.googleButtonContent}
-                  >
-                    Continue with Google
                   </Button>
 
                   {/* Sign Up Link */}
@@ -442,13 +427,14 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   input: {
-    backgroundColor: 'transparent',
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
   },
   loginButton: {
     backgroundColor: '#C53030', // Updated professional red
     borderRadius: 16,
     paddingVertical: 8,
-    marginTop: 8,
+    marginTop: 16,
     elevation: 6,
     ...Platform.select({
       ios: {
