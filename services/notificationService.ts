@@ -14,10 +14,54 @@ interface VisaExpiryNotificationData {
   expiryDate: string;
 }
 
+export interface NotificationLog {
+  id: string;
+  type: string;
+  employee_id: string;
+  days_until_expiry: number;
+  urgency: string;
+  sent_to: string[];
+  email_sent: boolean;
+  errors: string[];
+  manual_trigger: boolean;
+  notification_date: string;
+  template_used: string;
+  created_at: string;
+}
+
+export interface VisaNotificationRequest {
+  manual?: boolean;
+  employeeId?: string;
+  interval?: number;
+}
+
+export interface NotificationResult {
+  employee_id: string;
+  employee_name: string;
+  days_until_expiry: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface NotificationResponse {
+  success: boolean;
+  message: string;
+  summary?: {
+    total: number;
+    successful: number;
+    failed: number;
+    manual_trigger: boolean;
+  };
+  results: NotificationResult[];
+  error?: string;
+}
+
 class NotificationService {
   private readonly SENDGRID_API_KEY = process.env.EXPO_PUBLIC_SENDGRID_API_KEY || 'your-sendgrid-api-key';
   private readonly SENDGRID_FROM_EMAIL = process.env.EXPO_PUBLIC_SENDGRID_FROM_EMAIL || 'noreply@cubstechnical.com';
   private readonly SENDGRID_API_URL = 'https://api.sendgrid.com/v3/mail/send';
+  private readonly baseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  private readonly functionUrl = `${this.baseUrl}/functions/v1/send-visa-notifications`;
 
   async checkAndSendVisaExpiryNotifications(): Promise<void> {
     try {
@@ -372,6 +416,293 @@ Generated on ${new Date().toLocaleString()}
       throw error;
     }
   }
+
+  /**
+   * Send automated visa expiry notifications for all configured intervals
+   */
+  async sendAutomatedNotifications(): Promise<NotificationResponse> {
+    try {
+      console.log('🔔 Triggering automated visa notifications...');
+      
+      const { data, error } = await supabase.functions.invoke('send-visa-notifications', {
+        body: { manual: false }
+      });
+
+      if (error) {
+        throw new Error(`Supabase function error: ${error.message}`);
+      }
+
+      console.log('✅ Automated notifications completed:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Failed to send automated notifications:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send manual notification for a specific employee
+   */
+  async sendManualNotification(employeeId: string): Promise<NotificationResponse> {
+    try {
+      console.log(`🔔 Triggering manual visa notification for employee: ${employeeId}`);
+      
+      const { data, error } = await supabase.functions.invoke('send-visa-notifications', {
+        body: { 
+          manual: true, 
+          employeeId 
+        }
+      });
+
+      if (error) {
+        throw new Error(`Supabase function error: ${error.message}`);
+      }
+
+      console.log('✅ Manual notification completed:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ Failed to send manual notification:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send notifications for a specific interval (e.g., only 30-day reminders)
+   */
+  async sendIntervalNotifications(interval: number): Promise<NotificationResponse> {
+    try {
+      console.log(`🔔 Triggering ${interval}-day interval notifications...`);
+      
+      const { data, error } = await supabase.functions.invoke('send-visa-notifications', {
+        body: { 
+          manual: false, 
+          interval 
+        }
+      });
+
+      if (error) {
+        throw new Error(`Supabase function error: ${error.message}`);
+      }
+
+      console.log(`✅ ${interval}-day notifications completed:`, data);
+      return data;
+    } catch (error) {
+      console.error(`❌ Failed to send ${interval}-day notifications:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get notification logs with optional filtering
+   */
+  async getNotificationLogs(filters?: {
+    employeeId?: string;
+    type?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    manualOnly?: boolean;
+    limit?: number;
+  }): Promise<NotificationLog[]> {
+    try {
+      let query = supabase
+        .from('notification_logs')
+        .select(`
+          *,
+          employee:employees!notification_logs_employee_id_fkey (
+            name,
+            employee_id,
+            company_name
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (filters?.employeeId) {
+        query = query.eq('employee_id', filters.employeeId);
+      }
+
+      if (filters?.type) {
+        query = query.eq('type', filters.type);
+      }
+
+      if (filters?.dateFrom) {
+        query = query.gte('created_at', filters.dateFrom);
+      }
+
+      if (filters?.dateTo) {
+        query = query.lte('created_at', filters.dateTo);
+      }
+
+      if (filters?.manualOnly) {
+        query = query.eq('manual_trigger', true);
+      }
+
+      if (filters?.limit) {
+        query = query.limit(filters.limit);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error(`Failed to fetch notification logs: ${error.message}`);
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('❌ Failed to get notification logs:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get employees with expiring visas
+   */
+  async getExpiringVisas(daysThreshold: number = 90): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .not('visa_expiry_date', 'is', null)
+        .lte('visa_expiry_date', new Date(Date.now() + daysThreshold * 24 * 60 * 60 * 1000).toISOString());
+
+      if (error) {
+        throw new Error(`Failed to fetch expiring visas: ${error.message}`);
+      }
+
+      return data?.map(employee => {
+        const daysUntilExpiry = Math.ceil(
+          (new Date(employee.visa_expiry_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        );
+        
+        return {
+          ...employee,
+          days_until_expiry: daysUntilExpiry,
+          urgency_level: this.getUrgencyLevel(daysUntilExpiry)
+        };
+      }).filter(emp => emp.days_until_expiry >= 0) || [];
+    } catch (error) {
+      console.error('❌ Failed to get expiring visas:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get notification statistics
+   */
+  async getNotificationStats(dateFrom?: string, dateTo?: string): Promise<{
+    total: number;
+    successful: number;
+    failed: number;
+    manual: number;
+    automated: number;
+    byUrgency: Record<string, number>;
+    byDay: Record<string, number>;
+  }> {
+    try {
+      let query = supabase
+        .from('notification_logs')
+        .select('*');
+
+      if (dateFrom) {
+        query = query.gte('created_at', dateFrom);
+      }
+
+      if (dateTo) {
+        query = query.lte('created_at', dateTo);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        throw new Error(`Failed to fetch notification stats: ${error.message}`);
+      }
+
+      const logs = data || [];
+      
+      const stats = {
+        total: logs.length,
+        successful: logs.filter(log => log.email_sent).length,
+        failed: logs.filter(log => !log.email_sent).length,
+        manual: logs.filter(log => log.manual_trigger).length,
+        automated: logs.filter(log => !log.manual_trigger).length,
+        byUrgency: {} as Record<string, number>,
+        byDay: {} as Record<string, number>
+      };
+
+      // Group by urgency
+      logs.forEach(log => {
+        stats.byUrgency[log.urgency] = (stats.byUrgency[log.urgency] || 0) + 1;
+      });
+
+      // Group by day
+      logs.forEach(log => {
+        const day = new Date(log.created_at).toISOString().split('T')[0];
+        stats.byDay[day] = (stats.byDay[day] || 0) + 1;
+      });
+
+      return stats;
+    } catch (error) {
+      console.error('❌ Failed to get notification stats:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Test notification system (send test email)
+   */
+  async testNotification(): Promise<{ success: boolean; message: string }> {
+    try {
+      // This would send a test notification to verify the system is working
+      const { data, error } = await supabase.functions.invoke('send-visa-notifications', {
+        body: { 
+          manual: true, 
+          test: true 
+        }
+      });
+
+      if (error) {
+        throw new Error(`Test notification failed: ${error.message}`);
+      }
+
+      return {
+        success: true,
+        message: 'Test notification sent successfully'
+      };
+    } catch (error) {
+      console.error('❌ Test notification failed:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Test notification failed'
+      };
+    }
+  }
+
+  private getUrgencyLevel(days: number): string {
+    if (days <= 1) return 'critical';
+    if (days <= 7) return 'urgent';
+    if (days <= 30) return 'warning';
+    return 'notice';
+  }
+
+  /**
+   * Schedule automatic notifications (this would typically be called by a cron job)
+   */
+  async scheduleNotifications(): Promise<void> {
+    console.log('📅 Scheduling automatic visa notifications...');
+    
+    // In a production environment, this would set up cron jobs or scheduled tasks
+    // For now, we can call this manually or set up GitHub Actions/Vercel Cron
+    const intervals = [90, 60, 30, 7, 1];
+    
+    for (const interval of intervals) {
+      try {
+        await this.sendIntervalNotifications(interval);
+        console.log(`✅ Scheduled ${interval}-day notifications`);
+      } catch (error) {
+        console.error(`❌ Failed to schedule ${interval}-day notifications:`, error);
+      }
+    }
+  }
 }
 
-export const notificationService = new NotificationService(); 
+export const notificationService = new NotificationService();
+export default notificationService; 

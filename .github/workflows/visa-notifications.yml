@@ -1,0 +1,55 @@
+name: Automated Visa Notifications
+
+on:
+  schedule:
+    # Run every day at 9:00 AM UTC (adjust timezone as needed)
+    - cron: '0 9 * * *'
+  
+  # Allow manual triggering
+  workflow_dispatch:
+    inputs:
+      interval:
+        description: 'Specific interval to check (days)'
+        required: false
+        type: choice
+        options:
+          - 'all'
+          - '90'
+          - '60'
+          - '30'
+          - '7'
+          - '1'
+        default: 'all'
+
+jobs:
+  send-visa-notifications:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send Visa Notifications
+        run: |
+          echo "Sending visa expiry notifications..."
+          
+          # Determine the interval parameter
+          if [ "${{ github.event.inputs.interval }}" = "all" ] || [ -z "${{ github.event.inputs.interval }}" ]; then
+            INTERVAL_PARAM=""
+          else
+            INTERVAL_PARAM='"interval": ${{ github.event.inputs.interval }},'
+          fi
+          
+          # Call the Supabase edge function
+          curl -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/send-visa-notifications" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              ${INTERVAL_PARAM}
+              \"manual\": false,
+              \"source\": \"github-actions\"
+            }"
+        
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Visa notification job failed. Please check the logs."
+          # You can add additional notification logic here (e.g., send an email or Slack message) 

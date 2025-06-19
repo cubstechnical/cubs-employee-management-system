@@ -25,6 +25,7 @@ import {
   Checkbox,
   ProgressBar,
   DataTable,
+  Dialog,
 } from 'react-native-paper';
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -37,6 +38,7 @@ import { supabase } from '../../services/supabase';
 import { sendVisaExpiryReminders } from '../../services/emailService';
 import { DESIGN_SYSTEM } from '../../theme/designSystem';
 import { withAuthGuard } from '../../components/AuthGuard';
+import { notificationService, NotificationLog, NotificationResponse } from '../../services/notificationService';
 
 const { width, height } = Dimensions.get('window');
 const isMobile = width < DESIGN_SYSTEM.breakpoints.tablet;
@@ -66,6 +68,17 @@ interface Employee {
   is_active?: boolean;
 }
 
+interface VisaExpiryItem {
+  employee_id: string;
+  name: string;
+  company_name: string;
+  visa_expiry_date: string;
+  days_until_expiry: number;
+  urgency_level: string;
+  trade: string;
+  nationality: string;
+}
+
 function NotificationsScreen() {
   const theme = useTheme() as CustomTheme;
   const { user } = useAuth();
@@ -82,6 +95,23 @@ function NotificationsScreen() {
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [snackbar, setSnackbar] = useState('');
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [expiringVisas, setExpiringVisas] = useState<VisaExpiryItem[]>([]);
+  const [notificationLogs, setNotificationLogs] = useState<NotificationLog[]>([]);
+  const [selectedView, setSelectedView] = useState('expiring');
+  const [stats, setStats] = useState({
+    total: 0,
+    successful: 0,
+    failed: 0,
+    manual: 0,
+    automated: 0,
+    byUrgency: {} as Record<string, number>,
+    byDay: {} as Record<string, number>
+  });
+
+  // Manual notification state
+  const [sendingNotification, setSendingNotification] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState(false);
 
   // Animation
   const [fadeAnimation] = useState(new Animated.Value(0));
@@ -144,12 +174,45 @@ function NotificationsScreen() {
   const loadInitialData = async () => {
     setIsLoading(true);
     try {
-      await refreshEmployees();
+      await Promise.all([
+        loadExpiringVisas(),
+        loadNotificationLogs(),
+        loadNotificationStats()
+      ]);
     } catch (error) {
-      console.error('Error loading notifications data:', error);
-      setSnackbar('Failed to load notifications data');
+      console.error('Failed to load initial data:', error);
+      setSnackbar('Failed to load notification data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadExpiringVisas = async () => {
+    try {
+      const visas = await notificationService.getExpiringVisas(90);
+      setExpiringVisas(visas);
+    } catch (error) {
+      console.error('Failed to load expiring visas:', error);
+      setSnackbar('Failed to load expiring visas');
+    }
+  };
+
+  const loadNotificationLogs = async () => {
+    try {
+      const logs = await notificationService.getNotificationLogs({ limit: 50 });
+      setNotificationLogs(logs);
+    } catch (error) {
+      console.error('Failed to load notification logs:', error);
+      setSnackbar('Failed to load notification logs');
+    }
+  };
+
+  const loadNotificationStats = async () => {
+    try {
+      const statsData = await notificationService.getNotificationStats();
+      setStats(statsData);
+    } catch (error) {
+      console.error('Failed to load notification stats:', error);
     }
   };
 
@@ -286,8 +349,14 @@ function NotificationsScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadInitialData();
-    setRefreshing(false);
+    try {
+      await refreshEmployees();
+      await loadInitialData();
+    } catch (error) {
+      setSnackbar('Failed to refresh data');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const markAsRead = useCallback((notificationId: string) => {
@@ -343,6 +412,48 @@ function NotificationsScreen() {
       setSendingReminders(false);
     }
   }, [notifications]);
+
+  const handleSendAutomatedNotifications = async () => {
+    setSendingNotification(true);
+    try {
+      const result = await notificationService.sendAutomatedNotifications();
+      
+      if (result.success) {
+        setSnackbar(`✅ Sent ${result.summary?.successful || 0} notifications successfully`);
+        await loadNotificationLogs();
+        await loadNotificationStats();
+      } else {
+        setSnackbar(`❌ Notification failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to send automated notifications:', error);
+      setSnackbar('Failed to send automated notifications');
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
+  const handleSendManualNotification = async (employeeId: string) => {
+    setSendingNotification(true);
+    try {
+      const result = await notificationService.sendManualNotification(employeeId);
+      
+      if (result.success) {
+        setSnackbar(`✅ Manual notification sent successfully`);
+        await loadNotificationLogs();
+        await loadNotificationStats();
+      } else {
+        setSnackbar(`❌ Manual notification failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('Failed to send manual notification:', error);
+      setSnackbar('Failed to send manual notification');
+    } finally {
+      setSendingNotification(false);
+      setConfirmDialog(false);
+      setSelectedEmployee(null);
+    }
+  };
 
   // ENHANCED: Professional notification card component
   const NotificationCard = ({ notification, index }: { notification: Notification; index: number }) => {
@@ -515,7 +626,7 @@ function NotificationsScreen() {
   // ENHANCED: Professional header with statistics
   const renderHeader = () => (
     <Surface style={[styles.headerSection, { backgroundColor: theme.colors.surface }]} elevation={1}>
-                <LinearGradient
+      <LinearGradient
         colors={[DESIGN_SYSTEM.colors.primary[500] + '10', 'transparent']}
         style={styles.headerGradient}
       >
@@ -523,33 +634,32 @@ function NotificationsScreen() {
           <View style={styles.headerInfo}>
             <Text variant="headlineMedium" style={[styles.pageTitle, { color: theme.colors.onSurface }]}>
               Notifications
-                      </Text>
+            </Text>
             <Text variant="bodyMedium" style={[styles.subtitle, { color: theme.colors.onSurfaceVariant }]}>
               Stay updated with important alerts and reminders
-                      </Text>
-                    </View>
-                    
+            </Text>
+          </View>
+          
           <View style={styles.headerStats}>
             <View style={styles.statItem}>
               <Text variant="titleMedium" style={[styles.statValue, { color: DESIGN_SYSTEM.colors.error.main }]}>
                 {urgentCount}
-                          </Text>
+              </Text>
               <Text variant="bodySmall" style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>
                 Urgent
               </Text>
-                    </View>
+            </View>
             <View style={styles.statItem}>
               <Text variant="titleMedium" style={[styles.statValue, { color: DESIGN_SYSTEM.colors.info.main }]}>
                 {unreadCount}
               </Text>
               <Text variant="bodySmall" style={[styles.statLabel, { color: theme.colors.onSurfaceVariant }]}>
                 Unread
-                  </Text>
+              </Text>
             </View>
           </View>
-                      </View>
-                  
-        {/* Enhanced Search and Filter */}
+        </View>
+        
         <View style={styles.searchSection}>
           <Searchbar
             placeholder="Search notifications..."
@@ -560,9 +670,8 @@ function NotificationsScreen() {
             inputStyle={{ color: theme.colors.onSurface }}
             elevation={0}
           />
-                      </View>
-                      
-        {/* Filter Chips */}
+        </View>
+        
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
           <View style={styles.filtersContainer}>
             {[
@@ -593,32 +702,31 @@ function NotificationsScreen() {
                 {filter.label} ({filter.count})
               </Chip>
             ))}
-                        </View>
+          </View>
         </ScrollView>
 
-                    {/* Action Buttons */}
         <View style={styles.actionButtons}>
-                        <Button
-                        mode="outlined"
+          <Button
+            mode="outlined"
             icon="email-multiple"
             onPress={() => setShowReminderModal(true)}
             disabled={urgentCount === 0}
             style={styles.actionButton}
           >
             Send Reminders ({urgentCount})
-                        </Button>
-                        <Button
-                        mode="contained"
+          </Button>
+          <Button
+            mode="contained"
             icon="check-all"
             onPress={() => setShowMarkAllModal(true)}
             disabled={unreadCount === 0}
             style={[styles.actionButton, { backgroundColor: DESIGN_SYSTEM.colors.primary[500] }]}
           >
             Mark All Read
-                        </Button>
-                  </View>
-                </LinearGradient>
-              </Surface>
+          </Button>
+        </View>
+      </LinearGradient>
+    </Surface>
   );
 
   // Enhanced helper functions
@@ -651,6 +759,164 @@ function NotificationsScreen() {
     }
   };
 
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency) {
+      case 'critical': return theme.colors.error;
+      case 'urgent': return '#FF8C00';
+      case 'warning': return theme.colors.primary;
+      case 'notice': return theme.colors.outline;
+      default: return theme.colors.outline;
+    }
+  };
+
+  const getUrgencyIcon = (urgency: string) => {
+    switch (urgency) {
+      case 'critical': return 'alert';
+      case 'urgent': return 'clock-alert';
+      case 'warning': return 'information';
+      case 'notice': return 'bell';
+      default: return 'bell';
+    }
+  };
+
+  const filteredExpiringVisas = expiringVisas.filter(visa =>
+    visa.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    visa.company_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    visa.trade.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const filteredNotificationLogs = notificationLogs.filter(log =>
+    log.employee_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    log.type.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const renderExpiringVisaCard = (visa: VisaExpiryItem) => (
+    <Card key={visa.employee_id} style={styles.visaCard}>
+      <Card.Content>
+        <View style={styles.visaHeader}>
+          <View style={styles.visaInfo}>
+            <Text variant="titleMedium" style={styles.employeeName}>
+              {visa.name}
+            </Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+              {visa.company_name} • {visa.trade}
+            </Text>
+            <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+              ID: {visa.employee_id} • {visa.nationality}
+            </Text>
+          </View>
+          <View style={styles.urgencyContainer}>
+            <Chip
+              icon={getUrgencyIcon(visa.urgency_level)}
+              style={{ backgroundColor: getUrgencyColor(visa.urgency_level) + '20' }}
+              textStyle={{ color: getUrgencyColor(visa.urgency_level), fontWeight: 'bold' }}
+            >
+              {visa.days_until_expiry} days
+            </Chip>
+          </View>
+        </View>
+        
+        <View style={styles.visaDetails}>
+          <Text variant="bodyMedium">
+            <Text style={{ fontWeight: 'bold' }}>Expiry Date: </Text>
+            {new Date(visa.visa_expiry_date).toLocaleDateString()}
+          </Text>
+          <Text variant="bodyMedium">
+            <Text style={{ fontWeight: 'bold' }}>Urgency: </Text>
+            {visa.urgency_level.charAt(0).toUpperCase() + visa.urgency_level.slice(1)}
+          </Text>
+        </View>
+
+        <View style={styles.actionButtons}>
+          <Button
+            mode="outlined"
+            icon="email-send"
+            onPress={() => {
+              setSelectedEmployee(visa.employee_id);
+              setConfirmDialog(true);
+            }}
+            disabled={sendingNotification}
+            style={styles.actionButton}
+          >
+            Send Manual Reminder
+          </Button>
+        </View>
+      </Card.Content>
+    </Card>
+  );
+
+  const renderNotificationLogRow = (log: NotificationLog) => (
+    <DataTable.Row key={log.id}>
+      <DataTable.Cell style={{ flex: 2 }}>
+        <View>
+          <Text variant="bodyMedium">{log.employee_id}</Text>
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+            {log.template_used || 'Default'}
+          </Text>
+        </View>
+      </DataTable.Cell>
+      <DataTable.Cell style={{ flex: 1 }}>
+        <Chip
+          icon={getUrgencyIcon(log.urgency)}
+          style={{ backgroundColor: getUrgencyColor(log.urgency) + '20' }}
+          textStyle={{ color: getUrgencyColor(log.urgency) }}
+          compact
+        >
+          {log.days_until_expiry}d
+        </Chip>
+      </DataTable.Cell>
+      <DataTable.Cell style={{ flex: 1 }}>
+        <Badge style={{ 
+          backgroundColor: log.email_sent ? theme.colors.primary : theme.colors.error 
+        }}>
+          {log.email_sent ? 'Sent' : 'Failed'}
+        </Badge>
+      </DataTable.Cell>
+      <DataTable.Cell style={{ flex: 1 }}>
+        <Chip compact icon={log.manual_trigger ? 'account' : 'robot'}>
+          {log.manual_trigger ? 'Manual' : 'Auto'}
+        </Chip>
+      </DataTable.Cell>
+      <DataTable.Cell style={{ flex: 1 }}>
+        <Text variant="bodySmall">
+          {new Date(log.created_at).toLocaleDateString()}
+        </Text>
+      </DataTable.Cell>
+    </DataTable.Row>
+  );
+
+  const renderStatsCard = () => (
+    <Surface style={styles.statsCard} elevation={2}>
+      <Text variant="titleMedium" style={styles.statsTitle}>Notification Statistics</Text>
+      <View style={styles.statsGrid}>
+        <View style={styles.statItem}>
+          <Text variant="headlineMedium" style={{ color: theme.colors.primary }}>
+            {stats.total}
+          </Text>
+          <Text variant="bodySmall">Total Sent</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text variant="headlineMedium" style={{ color: theme.colors.primary }}>
+            {stats.successful}
+          </Text>
+          <Text variant="bodySmall">Successful</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text variant="headlineMedium" style={{ color: theme.colors.error }}>
+            {stats.failed}
+          </Text>
+          <Text variant="bodySmall">Failed</Text>
+        </View>
+        <View style={styles.statItem}>
+          <Text variant="headlineMedium" style={{ color: theme.colors.tertiary }}>
+            {stats.manual}
+          </Text>
+          <Text variant="bodySmall">Manual</Text>
+        </View>
+      </View>
+    </Surface>
+  );
+
   if (isLoading) {
     return (
       <AdminLayout title="Notifications" currentRoute="/(admin)/notifications">
@@ -658,7 +924,7 @@ function NotificationsScreen() {
           <ActivityIndicator size="large" color={DESIGN_SYSTEM.colors.primary[500]} />
           <Text variant="bodyLarge" style={[styles.loadingText, { color: theme.colors.onSurface }]}>
             Loading notifications...
-              </Text>
+          </Text>
         </View>
       </AdminLayout>
     );
@@ -670,49 +936,49 @@ function NotificationsScreen() {
         {renderHeader()}
         
         <View style={styles.contentContainer}>
-          {filteredNotifications.length === 0 ? (
-            <Surface style={[styles.emptyState, { backgroundColor: theme.colors.surface }]} elevation={1}>
-              <IconButton
-                icon="bell-outline"
-                size={64}
-                iconColor={theme.colors.onSurfaceVariant}
-              />
-              <Text variant="headlineSmall" style={[styles.emptyTitle, { color: theme.colors.onSurface }]}>
-                No notifications found
+          {selectedView === 'expiring' && (
+            <View style={styles.section}>
+              <Text variant="headlineSmall" style={styles.sectionTitle}>
+                Expiring Visas ({filteredExpiringVisas.length})
               </Text>
-              <Text variant="bodyMedium" style={[styles.emptyMessage, { color: theme.colors.onSurfaceVariant }]}>
-                {notifications.length === 0 
-                  ? 'All caught up! No new notifications at the moment.'
-                  : 'Try adjusting your search or filter criteria.'
-                }
-              </Text>
-                  <Button 
-                    mode="contained" 
-                    icon="refresh"
-                onPress={handleRefresh}
-                style={[styles.emptyAction, { backgroundColor: DESIGN_SYSTEM.colors.primary[500] }]}
-                  >
-                Refresh
-                  </Button>
-              </Surface>
-          ) : (
-            <FlatList
-              data={filteredNotifications}
-              renderItem={({ item, index }) => (
-                <NotificationCard notification={item} index={index} />
+              {filteredExpiringVisas.length === 0 ? (
+                <Card style={styles.emptyCard}>
+                  <Card.Content style={styles.emptyContent}>
+                    <Text variant="titleMedium">No expiring visas found</Text>
+                    <Text variant="bodyMedium">All visas are up to date!</Text>
+                  </Card.Content>
+                </Card>
+              ) : (
+                filteredExpiringVisas.map(renderExpiringVisaCard)
               )}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.notificationsList}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={handleRefresh}
-                  colors={[DESIGN_SYSTEM.colors.primary[500]]}
-                  tintColor={DESIGN_SYSTEM.colors.primary[500]}
-                />
-              }
-            />
+            </View>
+          )}
+
+          {selectedView === 'logs' && (
+            <View style={styles.section}>
+              <Text variant="headlineSmall" style={styles.sectionTitle}>
+                Recent Notifications ({filteredNotificationLogs.length})
+              </Text>
+              <DataTable>
+                <DataTable.Header>
+                  <DataTable.Title style={{ flex: 2 }}>Employee</DataTable.Title>
+                  <DataTable.Title style={{ flex: 1 }}>Days</DataTable.Title>
+                  <DataTable.Title style={{ flex: 1 }}>Status</DataTable.Title>
+                  <DataTable.Title style={{ flex: 1 }}>Type</DataTable.Title>
+                  <DataTable.Title style={{ flex: 1 }}>Date</DataTable.Title>
+                </DataTable.Header>
+                {filteredNotificationLogs.map(renderNotificationLogRow)}
+              </DataTable>
+            </View>
+          )}
+
+          {selectedView === 'stats' && (
+            <View style={styles.section}>
+              <Text variant="headlineSmall" style={styles.sectionTitle}>
+                Notification Statistics
+              </Text>
+              {renderStatsCard()}
+            </View>
           )}
         </View>
 
@@ -725,10 +991,10 @@ function NotificationsScreen() {
           >
             <Text variant="headlineSmall" style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
               Mark All as Read
-              </Text>
+            </Text>
             <Text variant="bodyMedium" style={[styles.modalMessage, { color: theme.colors.onSurfaceVariant }]}>
               Are you sure you want to mark all {unreadCount} notifications as read? This action cannot be undone.
-                    </Text>
+            </Text>
             <View style={styles.modalActions}>
               <Button
                 mode="outlined"
@@ -744,7 +1010,7 @@ function NotificationsScreen() {
               >
                 Mark All Read
               </Button>
-                  </View>
+            </View>
           </Modal>
         </Portal>
 
@@ -757,7 +1023,7 @@ function NotificationsScreen() {
           >
             <Text variant="headlineSmall" style={[styles.modalTitle, { color: theme.colors.onSurface }]}>
               Send Visa Reminders
-                    </Text>
+            </Text>
             <Text variant="bodyMedium" style={[styles.modalMessage, { color: theme.colors.onSurfaceVariant }]}>
               Send email reminders to {urgentCount} employees with urgent visa renewals?
             </Text>
@@ -770,29 +1036,52 @@ function NotificationsScreen() {
                 />
                 <Text variant="bodySmall" style={[styles.progressText, { color: theme.colors.onSurfaceVariant }]}>
                   Sending reminders...
-                    </Text>
-                  </View>
+                </Text>
+              </View>
             )}
-              <View style={styles.modalActions}>
-                <Button
-                  mode="outlined"
+            <View style={styles.modalActions}>
+              <Button
+                mode="outlined"
                 onPress={() => setShowReminderModal(false)}
                 disabled={sendingReminders}
                 style={styles.modalButton}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  mode="contained"
-                onPress={sendVisaReminders}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleSendAutomatedNotifications}
                 loading={sendingReminders}
                 disabled={sendingReminders}
                 style={[styles.modalButton, { backgroundColor: DESIGN_SYSTEM.colors.warning.main }]}
               >
                 Send Reminders
-                </Button>
-              </View>
+              </Button>
+            </View>
           </Modal>
+        </Portal>
+
+        {/* Confirmation Dialog */}
+        <Portal>
+          <Dialog visible={confirmDialog} onDismiss={() => setConfirmDialog(false)}>
+            <Dialog.Title>Send Manual Notification</Dialog.Title>
+            <Dialog.Content>
+              <Text>
+                Are you sure you want to send a manual visa expiry notification for this employee?
+                This will send an email to info@cubstechnical.com immediately.
+              </Text>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setConfirmDialog(false)}>Cancel</Button>
+              <Button 
+                mode="contained" 
+                onPress={() => selectedEmployee && handleSendManualNotification(selectedEmployee)}
+                loading={sendingNotification}
+              >
+                Send Notification
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
         </Portal>
 
         {/* Snackbar */}
@@ -800,10 +1089,6 @@ function NotificationsScreen() {
           visible={!!snackbar}
           onDismiss={() => setSnackbar('')}
           duration={4000}
-          action={{
-            label: 'Dismiss',
-            onPress: () => setSnackbar(''),
-          }}
         >
           {snackbar}
         </Snackbar>
@@ -1065,6 +1350,63 @@ const styles = StyleSheet.create({
   progressText: {
     textAlign: 'center',
     fontSize: 12,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+    fontWeight: 'bold',
+  },
+  visaCard: {
+    marginBottom: 12,
+  },
+  visaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  visaInfo: {
+    flex: 1,
+  },
+  employeeName: {
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  urgencyContainer: {
+    marginLeft: 12,
+  },
+  visaDetails: {
+    marginBottom: 16,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  actionButton: {
+    minWidth: 160,
+  },
+  emptyCard: {
+    padding: 24,
+  },
+  emptyContent: {
+    alignItems: 'center',
+  },
+  statsCard: {
+    padding: 16,
+    borderRadius: 12,
+  },
+  statsTitle: {
+    marginBottom: 16,
+    fontWeight: 'bold',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
   },
 });
 
