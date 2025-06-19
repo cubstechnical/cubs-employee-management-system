@@ -68,7 +68,7 @@ serve(async (req) => {
           urgency_level: getUrgencyLevel(daysUntilExpiry),
           trade: data.trade,
           nationality: data.nationality,
-          passport_no: data.passport_no
+          passport_no: data.passport_number
         }];
       }
     } else {
@@ -104,7 +104,7 @@ serve(async (req) => {
               urgency_level: getUrgencyLevel(daysUntilExpiry),
               trade: employee.trade,
               nationality: employee.nationality,
-              passport_no: employee.passport_no
+              passport_no: employee.passport_number
             };
           });
 
