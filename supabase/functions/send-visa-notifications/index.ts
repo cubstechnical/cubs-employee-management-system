@@ -1,5 +1,5 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const NOTIFICATION_INTERVALS = [90, 60, 30, 7, 1]; // days
-const FROM_EMAIL = 'techicalcubs@gmail.com';
+const FROM_EMAIL = 'technicalcubs@gmail.com';
 const TO_EMAIL = 'info@cubstechnical.com';
 
 interface VisaRecord {
@@ -22,6 +22,75 @@ interface VisaRecord {
   trade: string;
   nationality: string;
   passport_no: string;
+}
+
+function getUrgencyLevel(days: number): string {
+  if (days <= 1) return 'critical';
+  if (days <= 7) return 'urgent';
+  if (days <= 30) return 'warning';
+  return 'notice';
+}
+
+function createEmailContent(visa: VisaRecord, manual: boolean): string {
+  const urgencyColor = visa.urgency_level === 'critical' ? '#FF0000' : 
+                      visa.urgency_level === 'urgent' ? '#FF6600' : 
+                      visa.urgency_level === 'warning' ? '#FF9900' : '#0066CC';
+  
+  const urgencyText = visa.urgency_level === 'critical' ? 'CRITICAL ALERT' : 
+                     visa.urgency_level === 'urgent' ? 'URGENT NOTICE' : 
+                     visa.urgency_level === 'warning' ? 'WARNING' : 'NOTICE';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Visa Expiry Notification</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: ${urgencyColor}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; font-size: 24px;">${manual ? '[MANUAL] ' : ''}${urgencyText}</h1>
+          <h2 style="margin: 10px 0 0 0; font-size: 18px;">Visa Expiry Notification</h2>
+        </div>
+        
+        <div style="background-color: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #ddd;">
+          <h3 style="color: ${urgencyColor}; margin-top: 0;">Employee Visa Expiring in ${visa.days_until_expiry} Days</h3>
+          
+          <div style="background-color: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #333;">Employee Details:</h4>
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr><td style="padding: 8px 0; font-weight: bold;">Name:</td><td>${visa.name}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Employee ID:</td><td>${visa.emp_id}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Company:</td><td>${visa.company_name}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Nationality:</td><td>${visa.nationality}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Trade:</td><td>${visa.trade}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Email:</td><td>${visa.email_id || 'Not provided'}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Visa Expiry Date:</td><td style="color: ${urgencyColor}; font-weight: bold;">${new Date(visa.visa_expiry_date).toLocaleDateString()}</td></tr>
+              <tr><td style="padding: 8px 0; font-weight: bold;">Days Remaining:</td><td style="color: ${urgencyColor}; font-weight: bold; font-size: 18px;">${visa.days_until_expiry} days</td></tr>
+            </table>
+          </div>
+
+          <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 6px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #856404;">⚠️ Action Required:</h4>
+            <ul style="margin: 10px 0; padding-left: 20px; color: #856404;">
+              <li>Contact the employee immediately to arrange visa renewal</li>
+              <li>Prepare necessary documentation for visa extension</li>
+              <li>Coordinate with relevant authorities for renewal process</li>
+              <li>Update employee records once renewal is complete</li>
+            </ul>
+          </div>
+
+          <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 14px;">
+            <p><strong>CUBS Technical Contracting</strong><br>
+            Automated Visa Notification System</p>
+            <p>This ${manual ? 'manual' : 'automated'} notification was generated on ${new Date().toLocaleString()}</p>
+            <p style="font-size: 12px; color: #999;">Please do not reply to this email. This is an automated system notification.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
 }
 
 serve(async (req) => {
@@ -44,7 +113,7 @@ serve(async (req) => {
     if (manual && employeeId) {
       // Manual notification for specific employee
       const { data, error } = await supabaseClient
-        .from('employees')
+        .from('employee_table')
         .select('*')
         .eq('employee_id', employeeId)
         .not('visa_expiry_date', 'is', null)
@@ -68,7 +137,7 @@ serve(async (req) => {
           urgency_level: getUrgencyLevel(daysUntilExpiry),
           trade: data.trade,
           nationality: data.nationality,
-          passport_no: data.passport_number
+          passport_no: data.passport_no || data.passport_number || ''
         }];
       }
     } else {
@@ -77,7 +146,7 @@ serve(async (req) => {
       
       for (const days of intervalsToCheck) {
         const { data, error } = await supabaseClient
-          .from('employees')
+          .from('employee_table')
           .select('*')
           .not('visa_expiry_date', 'is', null);
 
@@ -104,7 +173,7 @@ serve(async (req) => {
               urgency_level: getUrgencyLevel(daysUntilExpiry),
               trade: employee.trade,
               nationality: employee.nationality,
-              passport_no: employee.passport_number
+              passport_no: employee.passport_no || employee.passport_number || ''
             };
           });
 
@@ -126,19 +195,31 @@ serve(async (req) => {
       });
     }
 
-    // Get email templates
-    const { data: templates, error: templateError } = await supabaseClient
-      .from('email_templates')
-      .select('*')
-      .eq('type', 'visa_reminder');
-
-    if (templateError) throw new Error(`Failed to fetch email templates: ${templateError.message}`);
-
     // Process each expiring visa
     const results = await Promise.all(expiringVisas.map(async (visa) => {
       try {
-        const template = selectTemplate(templates, visa.days_until_expiry);
-        const emailData = createEmailData(visa, template, manual);
+        const emailContent = createEmailContent(visa, manual);
+        const emailData = {
+          personalizations: [{
+            to: [{ email: TO_EMAIL, name: 'CUBS Technical HR' }],
+            subject: `${manual ? '[MANUAL] ' : ''}Visa Expiry Alert - ${visa.name} (${visa.days_until_expiry} days remaining)`
+          }],
+          from: {
+            email: FROM_EMAIL,
+            name: 'CUBS Visa Notification System'
+          },
+          content: [{
+            type: 'text/html',
+            value: emailContent
+          }],
+          categories: ['visa-reminder', manual ? 'manual' : 'automated'],
+          custom_args: {
+            employee_id: visa.emp_id,
+            days_until_expiry: visa.days_until_expiry.toString(),
+            urgency: visa.urgency_level,
+            manual: manual.toString()
+          }
+        };
 
         // Send email using SendGrid
         const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -161,10 +242,10 @@ serve(async (req) => {
           console.log(`✅ Email sent successfully for ${visa.name} (${visa.days_until_expiry} days)`);
         }
 
-        // Log the notification
+        // Log the notification (use UUID employee_id, not the string emp_id)
         await supabaseClient.from('notification_logs').insert({
           type: 'visa_expiry',
-          employee_id: visa.emp_id,
+          employee_id: visa.employee_id, // This is the UUID
           days_until_expiry: visa.days_until_expiry,
           urgency: visa.urgency_level,
           sent_to: [TO_EMAIL],
@@ -172,7 +253,7 @@ serve(async (req) => {
           errors: errorMessage ? [errorMessage] : [],
           manual_trigger: manual,
           notification_date: new Date().toISOString(),
-          template_used: template?.name || 'default'
+          template_used: 'default'
         });
 
         return {
@@ -225,134 +306,4 @@ serve(async (req) => {
       status: 500
     });
   }
-});
-
-function getUrgencyLevel(days: number): string {
-  if (days <= 1) return 'critical';
-  if (days <= 7) return 'urgent';
-  if (days <= 30) return 'warning';
-  return 'notice';
-}
-
-function selectTemplate(templates: any[], daysUntilExpiry: number): any | null {
-  let template = templates?.find(t => t.days_threshold === daysUntilExpiry);
-  
-  if (!template) {
-    const sortedTemplates = templates?.sort((a, b) => Math.abs(a.days_threshold - daysUntilExpiry) - Math.abs(b.days_threshold - daysUntilExpiry));
-    template = sortedTemplates?.[0];
-  }
-  
-  return template || null;
-}
-
-function createEmailData(visa: VisaRecord, template: any, manual: boolean) {
-  const defaultSubject = `${manual ? '[MANUAL] ' : ''}Visa Expiry Alert - ${visa.name} (${visa.days_until_expiry} days remaining)`;
-  const defaultContent = createDefaultEmailContent(visa, manual);
-
-  const subject = template?.subject 
-    ? replaceTemplateVariables(template.subject, visa, manual)
-    : defaultSubject;
-
-  const content = template?.content 
-    ? replaceTemplateVariables(template.content, visa, manual)
-    : defaultContent;
-
-  return {
-    personalizations: [{
-      to: [{ email: TO_EMAIL, name: 'CUBS Technical HR' }],
-      subject
-    }],
-    from: {
-      email: FROM_EMAIL,
-      name: 'CUBS Visa Notification System'
-    },
-    content: [{
-      type: 'text/html',
-      value: content
-    }],
-    categories: ['visa-reminder', manual ? 'manual' : 'automated'],
-    custom_args: {
-      employee_id: visa.emp_id,
-      days_until_expiry: visa.days_until_expiry.toString(),
-      urgency: visa.urgency_level,
-      manual: manual.toString()
-    }
-  };
-}
-
-function replaceTemplateVariables(text: string, visa: VisaRecord, manual: boolean): string {
-  return text
-    .replace(/\{\{employee_name\}\}/g, visa.name)
-    .replace(/\{\{employee_id\}\}/g, visa.emp_id)
-    .replace(/\{\{company_name\}\}/g, visa.company_name)
-    .replace(/\{\{days_remaining\}\}/g, visa.days_until_expiry.toString())
-    .replace(/\{\{visa_expiry_date\}\}/g, new Date(visa.visa_expiry_date).toLocaleDateString())
-    .replace(/\{\{urgency_level\}\}/g, visa.urgency_level.toUpperCase())
-    .replace(/\{\{trade\}\}/g, visa.trade || 'N/A')
-    .replace(/\{\{nationality\}\}/g, visa.nationality || 'N/A')
-    .replace(/\{\{passport_no\}\}/g, visa.passport_no || 'N/A')
-    .replace(/\{\{notification_type\}\}/g, manual ? 'MANUAL' : 'AUTOMATED')
-    .replace(/\{\{current_date\}\}/g, new Date().toLocaleDateString());
-}
-
-function createDefaultEmailContent(visa: VisaRecord, manual: boolean): string {
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Visa Expiry Alert</title>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: ${visa.urgency_level === 'critical' ? '#dc2626' : visa.urgency_level === 'urgent' ? '#ea580c' : '#d97706'}; color: white; padding: 20px; border-radius: 8px 8px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px; }
-        .alert-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
-        .critical { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-        .urgent { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
-        .warning { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
-        .notice { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
-        .details { background: white; padding: 15px; border-radius: 6px; margin: 15px 0; }
-        .footer { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #6b7280; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <h2>🚨 Visa Expiry Alert ${manual ? '(Manual Notification)' : ''}</h2>
-        </div>
-        <div class="content">
-          <div class="alert-badge ${visa.urgency_level}">
-            ${visa.urgency_level.toUpperCase()} - ${visa.days_until_expiry} ${visa.days_until_expiry === 1 ? 'day' : 'days'} remaining
-          </div>
-          
-          <div class="details">
-            <h3>Employee Information</h3>
-            <p><strong>Name:</strong> ${visa.name}</p>
-            <p><strong>Employee ID:</strong> ${visa.emp_id}</p>
-            <p><strong>Company:</strong> ${visa.company_name}</p>
-            <p><strong>Trade:</strong> ${visa.trade || 'N/A'}</p>
-            <p><strong>Nationality:</strong> ${visa.nationality || 'N/A'}</p>
-            <p><strong>Passport No:</strong> ${visa.passport_no || 'N/A'}</p>
-          </div>
-
-          <div class="details">
-            <h3>Visa Details</h3>
-            <p><strong>Expiry Date:</strong> ${new Date(visa.visa_expiry_date).toLocaleDateString()}</p>
-            <p><strong>Days Until Expiry:</strong> ${visa.days_until_expiry}</p>
-            <p><strong>Urgency Level:</strong> ${visa.urgency_level.toUpperCase()}</p>
-          </div>
-
-          ${manual ? '<p><em>This notification was triggered manually by an administrator.</em></p>' : ''}
-          
-          <div class="footer">
-            <p>This is an automated notification from the CUBS Visa Management System.</p>
-            <p>Please take appropriate action to renew the visa before expiry.</p>
-            <p>Generated on: ${new Date().toLocaleString()}</p>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
-} 
+}); 

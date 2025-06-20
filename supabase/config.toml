@@ -30,3 +30,9 @@ entrypoint = "./functions/hyper-task/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/hyper-task/*.html" ]
+
+[functions.send-visa-notifications]
+enabled = true
+verify_jwt = false
+import_map = "./functions/import_map.json"
+entrypoint = "./functions/send-visa-notifications/index.ts"

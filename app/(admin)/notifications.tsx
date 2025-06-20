@@ -1380,13 +1380,6 @@ const styles = StyleSheet.create({
   visaDetails: {
     marginBottom: 16,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  actionButton: {
-    minWidth: 160,
-  },
   emptyCard: {
     padding: 24,
   },
@@ -1404,9 +1397,6 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-  },
-  statItem: {
-    alignItems: 'center',
   },
 });
 

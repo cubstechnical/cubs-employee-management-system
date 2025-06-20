@@ -18,15 +18,13 @@ import { CustomTheme } from '../../theme';
 import { safeThemeAccess } from '../../utils/errorPrevention';
 import WebDatePicker from '../../components/WebDatePicker';
 
-interface VisaFormValues {
+interface VisaFormData {
+  employee_name: string;
   employee_id: string;
-  visa_type: string;
-  visa_number: string;
-  issue_date: Date;
-  expiry_date: Date;
-  passport_number: string;
-  nationality: string;
-  notes: string;
+  company_name: string;
+  visa_expiry_date: string;
+  passport_no: string;
+  mobile_number: string;
 }
 
 const visaTypes = [
@@ -38,16 +36,12 @@ const visaTypes = [
 ];
 
 const validationSchema = Yup.object().shape({
+  employee_name: Yup.string().required('Employee name is required'),
   employee_id: Yup.string().required('Employee ID is required'),
-  visa_type: Yup.string().required('Visa type is required'),
-  visa_number: Yup.string().required('Visa number is required'),
-  issue_date: Yup.date().required('Issue date is required'),
-  expiry_date: Yup.date()
-    .required('Expiry date is required')
-    .min(Yup.ref('issue_date'), 'Expiry date must be after issue date'),
-  passport_number: Yup.string().required('Passport number is required'),
-  nationality: Yup.string().required('Nationality is required'),
-  notes: Yup.string(),
+  company_name: Yup.string().required('Company name is required'),
+  visa_expiry_date: Yup.string().required('Visa expiry date is required'),
+  passport_no: Yup.string().required('Passport number is required'),
+  mobile_number: Yup.string().required('Mobile number is required'),
 });
 
 export default function VisaFormScreen() {
@@ -143,18 +137,16 @@ export default function VisaFormScreen() {
     },
   });
 
-  const initialValues: VisaFormValues = {
+  const initialValues: VisaFormData = {
+    employee_name: '',
     employee_id: '',
-    visa_type: '',
-    visa_number: '',
-    issue_date: new Date(),
-    expiry_date: new Date(),
-    passport_number: '',
-    nationality: '',
-    notes: '',
+    company_name: '',
+    visa_expiry_date: '',
+    passport_no: '',
+    mobile_number: '',
   };
 
-  const handleSubmit = async (values: VisaFormValues) => {
+  const handleSubmit = async (values: VisaFormData) => {
     setLoading(true);
     // Simulate API call
     setTimeout(() => {

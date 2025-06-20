@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS public.notification_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     type VARCHAR(50) NOT NULL DEFAULT 'visa_expiry',
-    employee_id VARCHAR(50) NOT NULL,
+    employee_id UUID NOT NULL,
     days_until_expiry INTEGER NOT NULL,
     urgency VARCHAR(20) NOT NULL CHECK (urgency IN ('critical', 'urgent', 'warning', 'notice')),
     sent_to TEXT[] NOT NULL DEFAULT '{}',
@@ -18,18 +18,55 @@ CREATE TABLE IF NOT EXISTS public.notification_logs (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
--- Create email_templates table
+-- Add foreign key constraint to notification_logs table (do this after table creation)
+DO $$ 
+BEGIN
+    -- Drop the constraint if it exists
+    IF EXISTS (SELECT 1 FROM information_schema.table_constraints 
+               WHERE constraint_name = 'notification_logs_employee_id_fkey' 
+               AND table_name = 'notification_logs') THEN
+        ALTER TABLE public.notification_logs DROP CONSTRAINT notification_logs_employee_id_fkey;
+    END IF;
+    
+    -- Add the foreign key constraint
+    ALTER TABLE public.notification_logs 
+    ADD CONSTRAINT notification_logs_employee_id_fkey 
+    FOREIGN KEY (employee_id) REFERENCES public.employee_table(id) ON DELETE CASCADE;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- If employees table doesn't exist, we'll create the constraint later
+        NULL;
+END $$;
+
+-- Create email_templates table (or alter existing one)
 CREATE TABLE IF NOT EXISTS public.email_templates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL UNIQUE,
-    type VARCHAR(50) NOT NULL DEFAULT 'visa_reminder',
     subject TEXT NOT NULL,
     content TEXT NOT NULL,
-    days_threshold INTEGER NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT true,
+    variables TEXT[] DEFAULT '{}',
+    type VARCHAR(50) NOT NULL DEFAULT 'visa_reminder',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    days_threshold INTEGER NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true
 );
+
+-- Add columns if they don't exist (in case table already exists)
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'email_templates' AND column_name = 'variables') THEN
+        ALTER TABLE public.email_templates ADD COLUMN variables TEXT[] DEFAULT '{}';
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'email_templates' AND column_name = 'days_threshold') THEN
+        ALTER TABLE public.email_templates ADD COLUMN days_threshold INTEGER;
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'email_templates' AND column_name = 'is_active') THEN
+        ALTER TABLE public.email_templates ADD COLUMN is_active BOOLEAN DEFAULT true;
+    END IF;
+END $$;
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_notification_logs_employee_id ON public.notification_logs(employee_id);
@@ -112,7 +149,7 @@ BEGIN
         e.trade,
         e.nationality,
         e.passport_number as passport_no
-    FROM public.employees e
+    FROM public.employee_table e
     WHERE e.visa_expiry_date IS NOT NULL
     AND EXTRACT(DAY FROM (e.visa_expiry_date::DATE - CURRENT_DATE)) = ANY(days)
     AND e.visa_expiry_date::DATE > CURRENT_DATE
@@ -157,7 +194,7 @@ BEGIN
         e.trade,
         e.nationality,
         e.passport_number as passport_no
-    FROM public.employees e
+    FROM public.employee_table e
     WHERE e.visa_expiry_date IS NOT NULL
     AND EXTRACT(DAY FROM (e.visa_expiry_date::DATE - CURRENT_DATE)) <= threshold_days
     AND e.visa_expiry_date::DATE >= CURRENT_DATE

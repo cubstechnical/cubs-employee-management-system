@@ -19,6 +19,70 @@ class EmployeeService {
     }
   }
 
+  // NEW: Paginated employee fetching for large datasets (500+ employees)
+  async getEmployeesPaginated(
+    page: number = 1,
+    limit: number = 50,
+    filters?: {
+      search?: string;
+      company?: string;
+      trade?: string;
+      visaStatus?: string;
+    }
+  ): Promise<{
+    employees: Employee[];
+    total: number;
+    hasMore: boolean;
+    page: number;
+    totalPages: number;
+  }> {
+    try {
+      const offset = (page - 1) * limit;
+      
+      let query = supabase
+        .from('employee_table')
+        .select('*', { count: 'exact' })
+        .range(offset, offset + limit - 1)
+        .order('name');
+
+      // Apply filters at database level for better performance
+      if (filters?.search) {
+        const searchTerm = `%${filters.search}%`;
+        query = query.or(`name.ilike.${searchTerm},employee_id.ilike.${searchTerm},company_name.ilike.${searchTerm},trade.ilike.${searchTerm}`);
+      }
+      
+      if (filters?.company && filters.company !== 'all') {
+        query = query.eq('company_name', filters.company);
+      }
+      
+      if (filters?.trade && filters.trade !== 'all') {
+        query = query.eq('trade', filters.trade);
+      }
+      
+      if (filters?.visaStatus && filters.visaStatus !== 'all') {
+        query = query.eq('visa_status', filters.visaStatus);
+      }
+      
+      const { data, error, count } = await query;
+      
+      if (error) throw error;
+      
+      const total = count || 0;
+      const totalPages = Math.ceil(total / limit);
+      
+      return {
+        employees: data || [],
+        total,
+        hasMore: (offset + limit) < total,
+        page,
+        totalPages,
+      };
+    } catch (error) {
+      console.error('Error fetching paginated employees:', error);
+      throw error;
+    }
+  }
+
   async getEmployeeById(employeeId: string): Promise<Employee | null> {
     try {
       const { data, error } = await supabase
@@ -240,7 +304,7 @@ class EmployeeService {
       // Process employees with visa status calculation
       const processedEmployees = employees.map(emp => ({
         ...emp,
-        visa_status: this.calculateVisaStatus(emp.visa_expiry_date),
+        visa_status: emp.visa_expiry_date ? this.calculateVisaStatus(emp.visa_expiry_date) : 'UNKNOWN',
         status: emp.status || 'Active',
       }));
       const { data, error } = await supabase

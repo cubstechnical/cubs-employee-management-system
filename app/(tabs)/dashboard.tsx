@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, ScrollView, View, Dimensions, Platform } from 'react-native';
+import { StyleSheet, ScrollView, View, Dimensions, Platform, Animated } from 'react-native';
 import { 
   Text, 
   Card, 
@@ -26,6 +26,11 @@ import { useEmployees } from '../../hooks/useEmployees';
 import { Employee } from '../../services/supabase';
 import { router } from 'expo-router';
 import { safeThemeAccess } from '../../utils/errorPrevention';
+import { 
+  AnimatedFadeSlide, 
+  AnimatedScaleIn, 
+  useStaggerAnimation 
+} from '../../components/AnimationProvider';
 
 interface StatCard {
   title: string;
@@ -93,13 +98,13 @@ export default function DashboardScreen() {
       thirtyDaysFromNow.setDate(today.getDate() + 30);
       return expiryDate <= thirtyDaysFromNow; // Show expiring or expired
     })
-    .map(emp => {
+    .map((emp, index) => {
       const expiryDate = new Date(emp.visa_expiry_date ?? '');
       const today = new Date();
       const isExpired = expiryDate < today;
       
       return {
-        id: emp.id,
+        id: emp.id || emp.employee_id || `employee-${index}`,
         employeeName: emp.name,
         visaType: 'Employment Visa',
         expiryDate: emp.visa_expiry_date ?? '',
@@ -139,123 +144,307 @@ export default function DashboardScreen() {
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: safeThemeAccess.colors(theme, 'background'),
+      backgroundColor: '#f5f5f5',
     },
     scrollView: {
       flex: 1,
     },
+    scrollContent: {
+      padding: 16,
+    },
     header: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: 24,
-      backgroundColor: safeThemeAccess.colors(theme, 'surface'),
-      ...Platform.select({
-        ios: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.2,
-      shadowRadius: 4,
-        },
-        android: {
-      elevation: 5,
-        },
-        web: {
-          boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
-        }
-      })
-    },
-    headerText: {
-      fontSize: 20,
-      fontWeight: 'bold',
-      color: safeThemeAccess.colors(theme, 'onSurface'),
-    },
-    statsContainer: {
       marginBottom: 24,
     },
-    statsContent: {
-      paddingHorizontal: 24,
-      gap: safeThemeAccess.spacing(theme, 'md'),
+    headerTitle: {
+      fontSize: 28,
+      fontWeight: 'bold',
+      color: '#1a1a1a',
+      marginBottom: 8,
+    },
+    headerSubtitle: {
+      fontSize: 16,
+      color: '#666666',
+      lineHeight: 24,
+    },
+    statsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginBottom: 24,
+      gap: 16,
     },
     statCard: {
-      width: 160,
-      marginRight: safeThemeAccess.spacing(theme, 'md'),
+      backgroundColor: '#ffffff',
+      borderRadius: 16,
+      padding: 20,
+      flex: 1,
+      minWidth: 150,
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
     },
-    statContent: {
-      alignItems: 'center',
-      gap: safeThemeAccess.spacing(theme, 'sm'),
-    },
-    statValue: {
-      fontSize: 20,
+    statNumber: {
+      fontSize: 32,
       fontWeight: 'bold',
-      color: safeThemeAccess.colors(theme, 'onSurface'),
+      marginBottom: 8,
     },
-    statTitle: {
+    statLabel: {
+      fontSize: 14,
+      color: '#666666',
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    statTrend: {
       fontSize: 12,
-      color: safeThemeAccess.colors(theme, 'onSurfaceVariant'),
-      textAlign: 'center',
+      marginTop: 4,
+      fontWeight: '500',
     },
-    section: {
-      padding: 24,
+    chartSection: {
+      marginBottom: 24,
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: 20,
       fontWeight: '600',
-      marginBottom: safeThemeAccess.spacing(theme, 'md'),
-      color: safeThemeAccess.colors(theme, 'onSurface'),
+      color: '#1a1a1a',
+      marginBottom: 16,
+    },
+    chartCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 16,
+      padding: 20,
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    },
+    chartContainer: {
+      height: 200,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    chartPlaceholder: {
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#f8f9fa',
+      borderRadius: 8,
+      padding: 40,
+    },
+    chartPlaceholderText: {
+      fontSize: 16,
+      color: '#666666',
+      textAlign: 'center',
+    },
+    quickActionsSection: {
+      marginBottom: 24,
+    },
+    quickActionsGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    quickActionCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      padding: 16,
+      flex: 1,
+      minWidth: 140,
+      alignItems: 'center',
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+    },
+    quickActionIcon: {
+      marginBottom: 8,
+    },
+    quickActionText: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: '#1a1a1a',
+      textAlign: 'center',
+    },
+    recentActivitySection: {
+      marginBottom: 24,
+    },
+    activityCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 16,
+      padding: 20,
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    },
+    activityItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
+    },
+    activityIcon: {
+      marginRight: 12,
+    },
+    activityContent: {
+      flex: 1,
+    },
+    activityTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      color: '#1a1a1a',
+      marginBottom: 2,
+    },
+    activityTime: {
+      fontSize: 12,
+      color: '#666666',
+    },
+    alertsSection: {
+      marginBottom: 24,
+    },
+    alertCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 16,
+      padding: 20,
+      elevation: 3,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+    },
+    alertItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f0f0f0',
+    },
+    alertIcon: {
+      marginRight: 12,
+    },
+    alertContent: {
+      flex: 1,
+    },
+    alertTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 2,
+    },
+    alertDescription: {
+      fontSize: 12,
+      color: '#666666',
+    },
+    alertAction: {
+      marginLeft: 8,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 48,
+    },
+    loadingText: {
+      marginTop: 16,
+      fontSize: 16,
+      color: '#666666',
+    },
+    errorContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 48,
+    },
+    errorText: {
+      fontSize: 16,
+      color: '#dc3545',
+      textAlign: 'center',
+      marginBottom: 16,
+    },
+    retryButton: {
+      backgroundColor: '#2563EB',
+      paddingHorizontal: 24,
+      paddingVertical: 12,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    statContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 16,
+    },
+    section: {
+      marginBottom: 24,
     },
     tabs: {
       flexDirection: 'row',
-      gap: safeThemeAccess.spacing(theme, 'sm'),
-      marginBottom: safeThemeAccess.spacing(theme, 'md'),
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 16,
     },
     tab: {
-      marginRight: safeThemeAccess.spacing(theme, 'sm'),
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 8,
+      alignItems: 'center',
     },
     notificationCard: {
-      marginBottom: safeThemeAccess.spacing(theme, 'md'),
+      marginBottom: 12,
+      borderRadius: 12,
     },
     notificationHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      marginBottom: safeThemeAccess.spacing(theme, 'xs'),
+      marginBottom: 8,
     },
     employeeName: {
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '600',
-      color: safeThemeAccess.colors(theme, 'onSurface'),
     },
     statusChip: {
-      height: 24,
-      borderRadius: safeThemeAccess.borderRadius(theme, 'large'),
-    },
-    statusChipText: {
-      fontSize: 12,
-      fontWeight: '500',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
     },
     visaType: {
-      fontSize: 12,
-      color: safeThemeAccess.colors(theme, 'onSurfaceVariant'),
-      marginBottom: safeThemeAccess.spacing(theme, 'xs'),
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 4,
     },
     expiryDate: {
       fontSize: 12,
-      color: safeThemeAccess.colors(theme, 'onSurfaceVariant'),
+      opacity: 0.7,
     },
     fab: {
       position: 'absolute',
-      right: 24,
-      bottom: 24,
+      margin: 16,
+      right: 0,
+      bottom: 16,
+      zIndex: 7000,
+      elevation: 8,
     },
     snackbar: {
-      margin: 24,
+      backgroundColor: '#2563EB',
     },
     loadingOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.1)',
     },
   });
 
@@ -263,30 +452,33 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView}>
         <View style={styles.header}>
-          <Text style={[styles.headerText, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+          <Text style={[styles.headerTitle, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
             Visa Management
           </Text>
-          <Bell size={24} color={safeThemeAccess.colors(theme, 'primary')} />
+          <Text style={[styles.headerSubtitle, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+            Manage your visas efficiently
+          </Text>
         </View>
 
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
-          style={styles.statsContainer}
-          contentContainerStyle={styles.statsContent}
+          style={styles.statsGrid}
         >
           {stats.map((stat, index) => (
-            <Card key={index} style={[styles.statCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]}>
-              <Card.Content style={styles.statContent}>
-                {stat.icon}
-                <Text style={[styles.statValue, { color: stat.color }]}>
-                  {stat.value}
-                </Text>
-                <Text style={[styles.statTitle, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
-                  {stat.title}
-                </Text>
-              </Card.Content>
-            </Card>
+            <AnimatedScaleIn key={index} delay={index * 100}>
+              <Card style={[styles.statCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]}>
+                <Card.Content style={styles.statContent}>
+                  {stat.icon}
+                  <Text style={[styles.statNumber, { color: stat.color }]}>
+                    {stat.value}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+                    {stat.title}
+                  </Text>
+                </Card.Content>
+              </Card>
+            </AnimatedScaleIn>
           ))}
         </ScrollView>
 
@@ -318,31 +510,32 @@ export default function DashboardScreen() {
             </Chip>
           </View>
 
-          {filteredNotifications.map((notification) => (
-            <Card 
-              key={notification.id} 
-              style={[styles.notificationCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]}
-            >
-              <Card.Content>
-                <View style={styles.notificationHeader}>
-                  <Text style={[styles.employeeName, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
-                    {notification.employeeName}
+          {filteredNotifications.map((notification, index) => (
+            <AnimatedFadeSlide key={notification.id} delay={index * 50}>
+              <Card 
+                style={[styles.notificationCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]}
+              >
+                <Card.Content>
+                  <View style={styles.notificationHeader}>
+                    <Text style={[styles.employeeName, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+                      {notification.employeeName}
+                    </Text>
+                    <Chip
+                      style={[styles.statusChip, { backgroundColor: getStatusColor(notification.status) }]}
+                      textStyle={{ color: '#fff' }}
+                    >
+                      {notification.status}
+                    </Chip>
+                  </View>
+                  <Text style={[styles.visaType, { color: safeThemeAccess.colors(theme, 'secondary') }]}>
+                    {notification.visaType}
                   </Text>
-                  <Chip
-                    style={[styles.statusChip, { backgroundColor: getStatusColor(notification.status) }]}
-                    textStyle={{ color: '#fff' }}
-                  >
-                    {notification.status}
-                  </Chip>
-                </View>
-                <Text style={[styles.visaType, { color: safeThemeAccess.colors(theme, 'secondary') }]}>
-                  {notification.visaType}
-                </Text>
-                <Text style={[styles.expiryDate, { color: safeThemeAccess.colors(theme, 'secondary') }]}>
-                  Expires: {notification.expiryDate}
-                </Text>
-              </Card.Content>
-            </Card>
+                  <Text style={[styles.expiryDate, { color: safeThemeAccess.colors(theme, 'secondary') }]}>
+                    Expires: {notification.expiryDate}
+                  </Text>
+                </Card.Content>
+              </Card>
+            </AnimatedFadeSlide>
           ))}
         </View>
       </ScrollView>

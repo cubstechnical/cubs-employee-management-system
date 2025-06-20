@@ -1,0 +1,288 @@
+{
+  "name": "CUBS Visa Expiration Reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "value": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "1",
+      "name": "Daily Check (9 AM)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "supabaseApi",
+        "operation": "select",
+        "table": "employee_table",
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "visa_expiry",
+              "condition": "isNotNull"
+            },
+            {
+              "keyName": "visa_expiry",
+              "condition": "dateBefore",
+              "value": "={{ $now.plus({days: 30}).toISO().split('T')[0] }}"
+            },
+            {
+              "keyName": "visa_expiry",
+              "condition": "dateAfter",
+              "value": "={{ $now.toISO().split('T')[0] }}"
+            }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Get Expiring Visas (30 days)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-cubs-main",
+          "name": "Supabase CUBS Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "3",
+      "name": "Check if Employees Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process each employee and prepare email data\nconst employees = $input.all();\nconst emailData = [];\n\nfor (const employee of employees) {\n  const data = employee.json;\n  \n  // Calculate days until expiry\n  const expiryDate = new Date(data.visa_expiry);\n  const today = new Date();\n  const daysUntilExpiry = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));\n  \n  // Determine urgency level\n  let urgencyLevel = 'normal';\n  let subject = '';\n  \n  if (daysUntilExpiry <= 7) {\n    urgencyLevel = 'critical';\n    subject = `🚨 URGENT: ${data.employee_name}'s visa expires in ${daysUntilExpiry} days`;\n  } else if (daysUntilExpiry <= 15) {\n    urgencyLevel = 'high';\n    subject = `⚠️ HIGH PRIORITY: ${data.employee_name}'s visa expires in ${daysUntilExpiry} days`;\n  } else {\n    subject = `📋 REMINDER: ${data.employee_name}'s visa expires in ${daysUntilExpiry} days`;\n  }\n  \n  emailData.push({\n    employee_id: data.employee_id,\n    employee_name: data.employee_name,\n    email: data.email,\n    visa_expiry: data.visa_expiry,\n    days_until_expiry: daysUntilExpiry,\n    urgency_level: urgencyLevel,\n    subject: subject,\n    department: data.department || 'Unknown',\n    nationality: data.nationality || 'Unknown'\n  });\n}\n\nreturn emailData.map(item => ({ json: item }));"
+      },
+      "id": "4",
+      "name": "Process Employee Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "sendGridApi",
+        "fromEmail": "noreply@cubs-hr.com",
+        "fromName": "CUBS HR System",
+        "toEmail": "hr@cubs.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }\n        .container { max-width: 600px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }\n        .header { background-color: #DC143C; color: white; padding: 20px; border-radius: 5px; text-align: center; margin-bottom: 20px; }\n        .urgency-critical { border-left: 5px solid #ff4444; background-color: #ffe6e6; }\n        .urgency-high { border-left: 5px solid #ff8800; background-color: #fff3e6; }\n        .urgency-normal { border-left: 5px solid #4CAF50; background-color: #e8f5e8; }\n        .employee-info { padding: 15px; margin: 10px 0; border-radius: 5px; }\n        .detail-row { margin: 8px 0; }\n        .label { font-weight: bold; color: #555; }\n        .value { color: #333; }\n        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>🏢 CUBS Employee Management</h1>\n            <h2>Visa Expiration Alert</h2>\n        </div>\n        \n        <div class=\"employee-info urgency-{{ $json.urgency_level }}\">\n            <h3>Employee Details</h3>\n            <div class=\"detail-row\"><span class=\"label\">Name:</span> <span class=\"value\">{{ $json.employee_name }}</span></div>\n            <div class=\"detail-row\"><span class=\"label\">Employee ID:</span> <span class=\"value\">{{ $json.employee_id }}</span></div>\n            <div class=\"detail-row\"><span class=\"label\">Department:</span> <span class=\"value\">{{ $json.department }}</span></div>\n            <div class=\"detail-row\"><span class=\"label\">Nationality:</span> <span class=\"value\">{{ $json.nationality }}</span></div>\n            <div class=\"detail-row\"><span class=\"label\">Email:</span> <span class=\"value\">{{ $json.email }}</span></div>\n            <div class=\"detail-row\"><span class=\"label\">Visa Expiry Date:</span> <span class=\"value\">{{ $json.visa_expiry }}</span></div>\n            <div class=\"detail-row\"><span class=\"label\">Days Until Expiry:</span> <span class=\"value\">{{ $json.days_until_expiry }} days</span></div>\n        </div>\n        \n        <div style=\"background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;\">\n            <h4>📋 Recommended Actions:</h4>\n            <ul>\n                <li>Contact the employee immediately to start visa renewal process</li>\n                <li>Gather required documents for visa extension</li>\n                <li>Coordinate with legal/immigration team</li>\n                <li>Update employee record once renewed</li>\n            </ul>\n        </div>\n        \n        <div class=\"footer\">\n            <p>This is an automated notification from CUBS Employee Management System</p>\n            <p>Generated on {{ $now.format('YYYY-MM-DD HH:mm') }}</p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "5",
+      "name": "Send Individual Emails",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1120, 200],
+      "credentials": {
+        "sendGridApi": {
+          "id": "sendgrid-cubs-main",
+          "name": "SendGrid CUBS Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "supabaseApi",
+        "operation": "insert",
+        "table": "notification_logs",
+        "records": {
+          "values": {
+            "employee_id": "={{ $json.employee_id }}",
+            "notification_type": "visa_expiry",
+            "sent_date": "={{ $now.toISO() }}",
+            "urgency_level": "={{ $json.urgency_level }}",
+            "days_until_expiry": "={{ $json.days_until_expiry }}",
+            "email_sent": true,
+            "metadata": {
+              "subject": "={{ $json.subject }}",
+              "visa_expiry_date": "={{ $json.visa_expiry }}"
+            }
+          }
+        }
+      },
+      "id": "6",
+      "name": "Log Notification",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-cubs-main",
+          "name": "Supabase CUBS Main"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create summary report for HR dashboard\nconst employees = $input.all();\nconst summary = {\n  total_expiring: employees.length,\n  critical_count: employees.filter(e => e.json.urgency_level === 'critical').length,\n  high_priority_count: employees.filter(e => e.json.urgency_level === 'high').length,\n  normal_count: employees.filter(e => e.json.urgency_level === 'normal').length,\n  departments: {},\n  generated_at: new Date().toISOString()\n};\n\n// Count by department\nemployees.forEach(emp => {\n  const dept = emp.json.department || 'Unknown';\n  summary.departments[dept] = (summary.departments[dept] || 0) + 1;\n});\n\nreturn [{ json: summary }];"
+      },
+      "id": "7",
+      "name": "Generate Summary Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "authentication": "sendGridApi",
+        "fromEmail": "noreply@cubs-hr.com",
+        "fromName": "CUBS HR Dashboard",
+        "toEmail": "hr-manager@cubs.com",
+        "subject": "📊 Daily Visa Expiration Summary - {{ $now.format('YYYY-MM-DD') }}",
+        "emailType": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }\n        .container { max-width: 700px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }\n        .header { background-color: #DC143C; color: white; padding: 20px; border-radius: 5px; text-align: center; margin-bottom: 25px; }\n        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin: 20px 0; }\n        .stat-card { background-color: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center; border-left: 4px solid #DC143C; }\n        .stat-number { font-size: 24px; font-weight: bold; color: #DC143C; }\n        .stat-label { font-size: 12px; color: #666; text-transform: uppercase; }\n        .critical { border-left-color: #ff4444; }\n        .high { border-left-color: #ff8800; }\n        .normal { border-left-color: #4CAF50; }\n        .department-list { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }\n        .dept-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }\n        .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; text-align: center; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>📊 CUBS HR Dashboard</h1>\n            <h2>Visa Expiration Summary Report</h2>\n            <p>{{ $now.format('dddd, MMMM DD, YYYY') }}</p>\n        </div>\n        \n        <div class=\"stats-grid\">\n            <div class=\"stat-card\">\n                <div class=\"stat-number\">{{ $json.total_expiring }}</div>\n                <div class=\"stat-label\">Total Expiring</div>\n            </div>\n            <div class=\"stat-card critical\">\n                <div class=\"stat-number\">{{ $json.critical_count }}</div>\n                <div class=\"stat-label\">Critical (≤7 days)</div>\n            </div>\n            <div class=\"stat-card high\">\n                <div class=\"stat-number\">{{ $json.high_priority_count }}</div>\n                <div class=\"stat-label\">High (≤15 days)</div>\n            </div>\n            <div class=\"stat-card normal\">\n                <div class=\"stat-number\">{{ $json.normal_count }}</div>\n                <div class=\"stat-label\">Normal (≤30 days)</div>\n            </div>\n        </div>\n        \n        <div class=\"department-list\">\n            <h3>📋 Breakdown by Department</h3>\n            {{ Object.entries($json.departments).map(([dept, count]) => `<div class=\"dept-item\"><span>${dept}</span><span><strong>${count}</strong> employees</span></div>`).join('') }}\n        </div>\n        \n        <div style=\"background-color: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n            <h4>💡 Quick Actions:</h4>\n            <ul>\n                <li>Review individual employee notifications sent today</li>\n                <li>Follow up on critical cases (≤7 days)</li>\n                <li>Schedule visa renewal meetings for high priority cases</li>\n                <li>Update visa status in employee records after renewals</li>\n            </ul>\n        </div>\n        \n        <div class=\"footer\">\n            <p>Automated report generated by CUBS Employee Management System</p>\n            <p>Report generated at: {{ $json.generated_at }}</p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "8",
+      "name": "Send Summary Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1,
+      "position": [1120, 400],
+      "credentials": {
+        "sendGridApi": {
+          "id": "sendgrid-cubs-main",
+          "name": "SendGrid CUBS Main"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "9",
+      "name": "No Expiring Visas",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 500]
+    }
+  ],
+  "connections": {
+    "Daily Check (9 AM)": {
+      "main": [
+        [
+          {
+            "node": "Get Expiring Visas (30 days)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Expiring Visas (30 days)": {
+      "main": [
+        [
+          {
+            "node": "Check if Employees Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Employees Found": {
+      "main": [
+        [
+          {
+            "node": "Process Employee Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate Summary Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Expiring Visas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Employee Data": {
+      "main": [
+        [
+          {
+            "node": "Send Individual Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Individual Emails": {
+      "main": [
+        [
+          {
+            "node": "Log Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary Report": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-01-27T10:00:00.000Z",
+      "updatedAt": "2025-01-27T10:00:00.000Z",
+      "id": "cubs-hr",
+      "name": "CUBS HR"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-27T10:00:00.000Z",
+  "versionId": "1"
+} 

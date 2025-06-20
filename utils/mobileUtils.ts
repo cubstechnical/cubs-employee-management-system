@@ -1,340 +1,254 @@
 // Mobile utility functions for CUBS Employee Management System
+import { Dimensions, Platform, PixelRatio } from 'react-native';
 
-import { Dimensions, Platform } from 'react-native';
+interface DeviceInfo {
+  width: number;
+  height: number;
+  isTablet: boolean;
+  isPhone: boolean;
+  isLandscape: boolean;
+  pixelRatio: number;
+  fontScale: number;
+}
 
-// Device detection utilities
-export const getDeviceInfo = () => {
+// Enhanced responsive breakpoints
+export const BREAKPOINTS = {
+  xs: 0,     // Extra small phones
+  sm: 576,   // Small phones
+  md: 768,   // Tablets
+  lg: 992,   // Small desktops
+  xl: 1200,  // Large desktops
+  xxl: 1400, // Extra large desktops
+} as const;
+
+export const MOBILE_BREAKPOINTS = {
+  phone: 576,
+  tablet: 768,
+  desktop: 992,
+} as const;
+
+// Mobile-optimized spacing system
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 48,
+};
+
+// Touch-friendly sizing
+export const touchTargets = {
+  small: 32,
+  medium: 44,  // Apple HIG minimum
+  large: 56,   // Material Design minimum
+  xlarge: 64,
+};
+
+// Mobile-optimized font sizes
+export const fontSizes = {
+  xs: 10,
+  sm: 12,
+  base: 14,
+  lg: 16,
+  xl: 18,
+  xxl: 20,
+  xxxl: 24,
+};
+
+// Mobile-optimized component sizing
+export const componentSizes = {
+  button: {
+    height: {
+      small: touchTargets.small,
+      medium: touchTargets.medium,
+      large: touchTargets.large,
+    },
+    padding: {
+      small: { horizontal: spacing.sm, vertical: spacing.xs },
+      medium: { horizontal: spacing.md, vertical: spacing.sm },
+      large: { horizontal: spacing.lg, vertical: spacing.md },
+    },
+  },
+  input: {
+    height: touchTargets.large,
+    padding: { horizontal: spacing.md, vertical: spacing.sm },
+  },
+  card: {
+    padding: {
+      phone: spacing.md,
+      tablet: spacing.lg,
+      desktop: spacing.xl,
+    },
+    borderRadius: {
+      phone: 8,
+      tablet: 12,
+      desktop: 16,
+    },
+  },
+};
+
+// Get current device information
+export const getDeviceInfo = (): DeviceInfo => {
   const { width, height } = Dimensions.get('window');
+  const isLandscape = width > height;
   
   return {
     width,
     height,
-    isMobile: width <= 768,
-    isTablet: width > 768 && width <= 1024,
-    isDesktop: width > 1024,
-    isIOS: Platform.OS === 'ios',
-    isAndroid: Platform.OS === 'android',
-    isWeb: Platform.OS === 'web',
-    aspect: width / height,
-    isLandscape: width > height,
-    isPortrait: height > width,
+    isTablet: width >= MOBILE_BREAKPOINTS.tablet,
+    isPhone: width < MOBILE_BREAKPOINTS.tablet,
+    isLandscape,
+    pixelRatio: PixelRatio.get(),
+    fontScale: PixelRatio.getFontScale(),
   };
 };
 
-// Responsive text sizes
-export const getResponsiveSize = (mobileSize: number, tabletSize?: number, desktopSize?: number) => {
-  const { isMobile, isTablet } = getDeviceInfo();
+// Responsive spacing based on device size
+export const getResponsiveSpacing = (size: keyof typeof spacing): number => {
+  const { isPhone } = getDeviceInfo();
+  const baseSpacing = spacing[size];
   
-  if (isMobile) return mobileSize;
-  if (isTablet && tabletSize) return tabletSize;
-  if (desktopSize) return desktopSize;
-  
-  return tabletSize || mobileSize * 1.2;
+  // Reduce spacing on phones for better space utilization
+  return isPhone ? Math.max(baseSpacing * 0.75, 4) : baseSpacing;
 };
 
-// Keyboard management for web
-export const handleKeyboardBehavior = () => {
-  if (Platform.OS !== 'web') return;
-
-  // Function to close keyboard on mobile web
-  const closeKeyboard = () => {
-    if (document.activeElement) {
-      (document.activeElement as HTMLElement).blur();
-    }
-  };
-
-  // Function to handle input focus with scroll behavior
-  const handleInputFocus = (event: Event) => {
-    const target = event.target as HTMLElement;
-    if (target && target.tagName.toLowerCase() === 'input') {
-      // Scroll element into view with offset for mobile header
-      setTimeout(() => {
-        target.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        });
-      }, 100);
-    }
-  };
-
-  // Function to handle input blur
-  const handleInputBlur = (event: Event) => {
-    const target = event.target as HTMLElement;
-    if (target && target.tagName.toLowerCase() === 'input') {
-      // Small delay to allow for value processing
-      setTimeout(() => {
-        target.blur();
-      }, 100);
-    }
-  };
-
-  // Add event listeners
-  document.addEventListener('focus', handleInputFocus, true);
-  document.addEventListener('blur', handleInputBlur, true);
+// Get responsive font size
+export const getResponsiveFontSize = (size: keyof typeof fontSizes): number => {
+  const { fontScale, isPhone } = getDeviceInfo();
+  const baseFontSize = fontSizes[size];
   
-  // Handle viewport resize (keyboard open/close on mobile)
-  let initialViewportHeight = window.innerHeight;
+  // Apply font scale and device-specific adjustments
+  const scaledSize = baseFontSize * fontScale;
   
-  const handleViewportChange = () => {
-    const currentHeight = window.innerHeight;
-    const heightDiff = initialViewportHeight - currentHeight;
-    
-    // If height decreased significantly, keyboard is likely open
-    if (heightDiff > 150) {
-      document.body.style.height = `${currentHeight}px`;
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.height = 'auto';
-      document.body.style.overflow = 'auto';
-    }
-  };
-
-  window.addEventListener('resize', handleViewportChange);
-  
-  // Return cleanup function
-  return () => {
-    document.removeEventListener('focus', handleInputFocus, true);
-    document.removeEventListener('blur', handleInputBlur, true);
-    window.removeEventListener('resize', handleViewportChange);
-  };
-};
-
-// Text truncation utilities
-export const truncateText = (text: string, maxLength: number = 50, suffix: string = '...') => {
-  if (!text || text.length <= maxLength) return text;
-  return text.substring(0, maxLength - suffix.length) + suffix;
-};
-
-export const truncateTextSmart = (text: string, maxLength: number = 50) => {
-  if (!text || text.length <= maxLength) return text;
-  
-  // Try to break at word boundaries
-  const truncated = text.substring(0, maxLength);
-  const lastSpace = truncated.lastIndexOf(' ');
-  
-  if (lastSpace > maxLength * 0.7) {
-    return truncated.substring(0, lastSpace) + '...';
+  // Limit font scaling on phones to prevent layout issues
+  if (isPhone && fontScale > 1.2) {
+    return baseFontSize * 1.2;
   }
   
-  return truncated + '...';
+  return scaledSize;
 };
 
-// Dynamic column width calculation for tables
-export const getTableColumnWidths = (isMobile: boolean) => {
-  if (isMobile) {
-    return {
-      checkbox: 36,
-      name: 120,
-      email: 140,
-      company: 160,
-      trade: 90,
-      status: 70,
-      date: 90,
-      actions: 70,
-    };
+// Enhanced responsive design utilities
+export const useResponsiveValue = <T>(values: {
+  xs?: T;
+  sm?: T;
+  md?: T;
+  lg?: T;
+  xl?: T;
+  xxl?: T;
+}): T | undefined => {
+  const { width } = getDeviceInfo();
+  
+  if (width >= BREAKPOINTS.xxl && values.xxl !== undefined) return values.xxl;
+  if (width >= BREAKPOINTS.xl && values.xl !== undefined) return values.xl;
+  if (width >= BREAKPOINTS.lg && values.lg !== undefined) return values.lg;
+  if (width >= BREAKPOINTS.md && values.md !== undefined) return values.md;
+  if (width >= BREAKPOINTS.sm && values.sm !== undefined) return values.sm;
+  return values.xs;
+};
+
+// Get responsive component size
+export const getComponentSize = (component: keyof typeof componentSizes, property: string): any => {
+  const { isPhone, isTablet } = getDeviceInfo();
+  const componentConfig = componentSizes[component] as any;
+  
+  if (!componentConfig || !componentConfig[property]) return undefined;
+  
+  const propertyConfig = componentConfig[property];
+  
+  if (typeof propertyConfig === 'object') {
+    if (isPhone && propertyConfig.phone !== undefined) return propertyConfig.phone;
+    if (isTablet && propertyConfig.tablet !== undefined) return propertyConfig.tablet;
+    return propertyConfig.desktop || propertyConfig.medium || propertyConfig.large;
   }
   
-  return {
-    checkbox: 60,
-    name: 220,
-    email: 250,
-    company: 280,
-    trade: 160,
-    status: 130,
-    date: 150,
-    actions: 160,
-  };
+  return propertyConfig;
 };
 
-// Responsive grid calculations
-export const getGridColumns = (containerWidth: number, itemMinWidth: number = 180) => {
-  const { isMobile, isTablet } = getDeviceInfo();
+// Platform-specific utilities
+export const platformUtils = {
+  isWeb: Platform.OS === 'web',
+  isIOS: Platform.OS === 'ios',
+  isAndroid: Platform.OS === 'android',
   
-  if (isMobile) {
-    return containerWidth < 600 ? 2 : 3;
-  }
-  
-  if (isTablet) {
-    return Math.floor(containerWidth / itemMinWidth);
-  }
-  
-  return Math.floor(containerWidth / itemMinWidth);
+  // Get platform-specific styles
+  select: <T>(options: { web?: T; ios?: T; android?: T; native?: T; default?: T }): T | undefined => {
+    if (Platform.OS === 'web' && options.web !== undefined) return options.web;
+    if (Platform.OS === 'ios' && options.ios !== undefined) return options.ios;
+    if (Platform.OS === 'android' && options.android !== undefined) return options.android;
+    if (Platform.OS !== 'web' && options.native !== undefined) return options.native;
+    return options.default;
+  },
 };
 
-// Animation utilities for mobile performance
-export const getMobileAnimationConfig = () => {
-  const { isMobile } = getDeviceInfo();
+// Mobile navigation utilities
+export const navigationUtils = {
+  // Check if device supports gestures
+  supportsGestures: (): boolean => {
+    const { isPhone } = getDeviceInfo();
+    return isPhone && (Platform.OS === 'ios' || Platform.OS === 'android');
+  },
   
-  return {
-    duration: isMobile ? 200 : 300,
-    useNativeDriver: true,
-    tension: isMobile ? 100 : 80,
-    friction: isMobile ? 10 : 8,
-  };
-};
-
-// Safe area utilities
-export const getSafeAreaInsets = () => {
-  if (Platform.OS === 'web') {
-    // For web, try to detect if we're in a standalone PWA with notch
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    const hasNotch = window.screen.height > window.innerHeight + 100;
+  // Get safe area insets for different device types
+  getSafeAreaInsets: () => {
+    const { isPhone } = getDeviceInfo();
     
     return {
-      top: isStandalone && hasNotch ? 44 : 0,
-      bottom: isStandalone ? 34 : 0,
+      top: platformUtils.select({ ios: isPhone ? 44 : 24, android: 24, web: 0, default: 0 }),
+      bottom: platformUtils.select({ ios: isPhone ? 34 : 0, android: 0, web: 0, default: 0 }),
       left: 0,
       right: 0,
     };
-  }
-  
-  // For React Native, use safe area context
-  return {
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-  };
+  },
 };
 
-// Touch-friendly hit area calculation
-export const getTouchableHitSlop = (isMobile: boolean) => {
-  if (!isMobile) return { top: 0, bottom: 0, left: 0, right: 0 };
+// Performance optimization utilities
+export const performanceUtils = {
+  // Throttle function for performance
+  throttle: <T extends (...args: any[]) => any>(func: T, limit: number): T => {
+    let inThrottle: boolean;
+    return ((...args: any[]) => {
+      if (!inThrottle) {
+        func.apply(null, args);
+        inThrottle = true;
+        setTimeout(() => (inThrottle = false), limit);
+      }
+    }) as T;
+  },
   
-  return {
-    top: 8,
-    bottom: 8,
-    left: 8,
-    right: 8,
-  };
-};
-
-// Date formatting for mobile
-export const formatDateForMobile = (date: string | Date, isMobile: boolean = true) => {
-  if (!date) return 'N/A';
+  // Debounce function for search inputs
+  debounce: <T extends (...args: any[]) => any>(func: T, delay: number): T => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    return ((...args: any[]) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func.apply(null, args), delay);
+    }) as T;
+  },
   
-  const dateObj = typeof date === 'string' ? new Date(date) : date;
-  
-  if (isMobile) {
-    // Shorter format for mobile
-    return dateObj.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: '2-digit',
-    });
-  }
-  
-  return dateObj.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-};
-
-// Visa status color utilities
-export const getVisaStatusColor = (expiryDate: string) => {
-  if (!expiryDate) return '#6B7280'; // gray
-  
-  const today = new Date();
-  const expiry = new Date(expiryDate);
-  const daysUntilExpiry = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  
-  if (daysUntilExpiry <= 0) return '#EF4444'; // red - expired
-  if (daysUntilExpiry <= 7) return '#F59E0B'; // amber - critical
-  if (daysUntilExpiry <= 30) return '#F97316'; // orange - warning
-  
-  return '#10B981'; // green - valid
-};
-
-// Form validation helpers
-export const validateEmail = (email: string) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-};
-
-export const validatePhone = (phone: string) => {
-  // Remove all non-digits
-  const digits = phone.replace(/\D/g, '');
-  // Check if it's a reasonable length (8-15 digits)
-  return digits.length >= 8 && digits.length <= 15;
-};
-
-export const formatPhoneNumber = (phone: string) => {
-  const digits = phone.replace(/\D/g, '');
-  
-  if (digits.length <= 3) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
-  if (digits.length <= 10) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
-  
-  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 10)}x${digits.slice(10)}`;
-};
-
-// Performance monitoring
-export const measurePerformance = (label: string, fn: () => void) => {
-  const start = performance.now();
-  fn();
-  const end = performance.now();
-  
-  if (__DEV__) {
-    console.log(`[Performance] ${label}: ${(end - start).toFixed(2)}ms`);
-  }
-};
-
-// Debounce utility for search inputs
-export const debounce = <T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): ((...args: Parameters<T>) => void) => {
-  let timeout: ReturnType<typeof setTimeout>;
-  
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-};
-
-// Memory cleanup utilities
-export const cleanupAnimations = (animations: any[]) => {
-  animations.forEach(animation => {
-    if (animation && typeof animation.stop === 'function') {
-      animation.stop();
-    }
-  });
-};
-
-// Error boundary utility
-export const handleMobileError = (error: Error, errorInfo?: any) => {
-  const { isMobile } = getDeviceInfo();
-  
-  if (__DEV__) {
-    console.error('Mobile Error:', error, errorInfo);
-  }
-  
-  // In production, you might want to send this to an error tracking service
-  if (!__DEV__ && isMobile) {
-    // Send to analytics/crash reporting
-    // Example: Sentry.captureException(error);
-  }
+  // Check if device has limited resources
+  isLowEndDevice: (): boolean => {
+    const { pixelRatio, width, height } = getDeviceInfo();
+    const totalPixels = width * height * pixelRatio;
+    
+    // Consider devices with less than 2M pixels as low-end
+    return totalPixels < 2000000;
+  },
 };
 
 export default {
   getDeviceInfo,
-  getResponsiveSize,
-  handleKeyboardBehavior,
-  truncateText,
-  truncateTextSmart,
-  getTableColumnWidths,
-  getGridColumns,
-  getMobileAnimationConfig,
-  getSafeAreaInsets,
-  getTouchableHitSlop,
-  formatDateForMobile,
-  getVisaStatusColor,
-  validateEmail,
-  validatePhone,
-  formatPhoneNumber,
-  measurePerformance,
-  debounce,
-  cleanupAnimations,
-  handleMobileError,
+  useResponsiveValue,
+  getResponsiveSpacing,
+  getResponsiveFontSize,
+  getComponentSize,
+  platformUtils,
+  navigationUtils,
+  performanceUtils,
+  BREAKPOINTS,
+  MOBILE_BREAKPOINTS,
+  spacing,
+  touchTargets,
+  fontSizes,
+  componentSizes,
 }; 

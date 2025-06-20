@@ -202,10 +202,10 @@ export const ThemedView: React.FC<{
   const backgroundColor = theme === 'light' ? lightColor : darkColor;
   
   return (
-    <div style={[
-      { backgroundColor: backgroundColor || colors.background },
-      style,
-    ]}>
+    <div style={{
+      backgroundColor: backgroundColor || colors.background,
+      ...(style || {}),
+    }}>
       {children}
     </div>
   );
@@ -246,11 +246,11 @@ export const ThemedText: React.FC<{
   };
   
   return (
-    <span style={[
-      { color: color || colors.onBackground },
-      typeStyles[type],
-      style,
-    ]}>
+    <span style={{
+      color: color || colors.onBackground,
+      ...typeStyles[type],
+      ...(style || {}),
+    }}>
       {children}
     </span>
   );

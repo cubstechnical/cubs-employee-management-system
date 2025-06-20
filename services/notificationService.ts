@@ -88,7 +88,7 @@ class NotificationService {
       
       // Get employees with visas expiring on the target date
       const { data: employees, error } = await supabase
-        .from('employees')
+        .from('employee_table')
         .select('*')
         .not('visa_expiry_date', 'is', null)
         .gte('visa_expiry_date', targetDate.toISOString().split('T')[0])
@@ -144,7 +144,7 @@ class NotificationService {
       
       const htmlContent = this.generateVisaExpiryEmailHTML({
         employeeName: employee.name,
-        employeeId: employee.employee_id,
+        employeeId: employee.employee_id || 'N/A',
         companyName: employee.company_name,
         expiryDate: formattedDate,
         daysUntilExpiry,
@@ -154,7 +154,7 @@ class NotificationService {
 
       const textContent = this.generateVisaExpiryEmailText({
         employeeName: employee.name,
-        employeeId: employee.employee_id,
+        employeeId: employee.employee_id || 'N/A',
         companyName: employee.company_name,
         expiryDate: formattedDate,
         daysUntilExpiry,
@@ -504,16 +504,10 @@ Generated on ${new Date().toLocaleString()}
     limit?: number;
   }): Promise<NotificationLog[]> {
     try {
+      // First, get the notification logs without the join
       let query = supabase
         .from('notification_logs')
-        .select(`
-          *,
-          employee:employees!notification_logs_employee_id_fkey (
-            name,
-            employee_id,
-            company_name
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (filters?.employeeId) {
@@ -540,13 +534,42 @@ Generated on ${new Date().toLocaleString()}
         query = query.limit(filters.limit);
       }
 
-      const { data, error } = await query;
+      const { data: logs, error } = await query;
 
       if (error) {
         throw new Error(`Failed to fetch notification logs: ${error.message}`);
       }
 
-      return data || [];
+      // If we have logs, enrich them with employee data
+      if (logs && logs.length > 0) {
+        const employeeIds = [...new Set(logs.map(log => log.employee_id))];
+        
+        // Get employee data separately
+        const { data: employees, error: empError } = await supabase
+          .from('employee_table')
+          .select('id, name, employee_id, company_name')
+          .in('id', employeeIds);
+
+        if (empError) {
+          console.warn('Could not fetch employee data for logs:', empError.message);
+          // Return logs without employee data
+          return logs.map(log => ({
+            ...log,
+            employee: null
+          }));
+        }
+
+        // Create a map for quick lookup
+        const employeeMap = new Map(employees?.map(emp => [emp.id, emp]) || []);
+
+        // Enrich logs with employee data
+        return logs.map(log => ({
+          ...log,
+          employee: employeeMap.get(log.employee_id) || null
+        }));
+      }
+
+      return logs || [];
     } catch (error) {
       console.error('❌ Failed to get notification logs:', error);
       throw error;
@@ -559,7 +582,7 @@ Generated on ${new Date().toLocaleString()}
   async getExpiringVisas(daysThreshold: number = 90): Promise<any[]> {
     try {
       const { data, error } = await supabase
-        .from('employees')
+        .from('employee_table')
         .select('*')
         .not('visa_expiry_date', 'is', null)
         .lte('visa_expiry_date', new Date(Date.now() + daysThreshold * 24 * 60 * 60 * 1000).toISOString());

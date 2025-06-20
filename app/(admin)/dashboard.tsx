@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Dimensions, RefreshControl, Animated, Image, Platform, TouchableOpacity } from 'react-native';
-import { Text, Card, useTheme, Surface, Button, Chip, IconButton, ActivityIndicator, ProgressBar, Portal, Modal, Divider, List } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Dimensions, RefreshControl, Animated, Image, Platform, TouchableOpacity, Alert } from 'react-native';
+import { Text, Card, useTheme, Surface, Button, Chip, IconButton, ActivityIndicator, ProgressBar, Portal, Modal, Divider, List, Snackbar } from 'react-native-paper';
 import { router } from 'expo-router';
 import { PieChart, BarChart, LineChart, ProgressChart, ContributionGraph } from 'react-native-chart-kit';
 import { useAuth } from '../../hooks/useAuth';
@@ -14,6 +14,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../services/supabase';
 import { documentService } from '../../services/documentService';
 import { Employee } from '../../services/supabase';
+import { VisaAutomationService } from '../../services/visaAutomationService';
+import { 
+  AnimatedFadeSlide, 
+  AnimatedScaleIn, 
+  useStaggerAnimation,
+  useBounceAnimation 
+} from '../../components/AnimationProvider';
 
 const { width } = Dimensions.get('window');
 const isMobile = width < 768;
@@ -82,6 +89,10 @@ function AdminDashboard() {
   const { employees, isLoading: employeesLoading, refreshEmployees } = useEmployees();
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [testingVisa, setTestingVisa] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState<'success' | 'error'>('success');
   const [stats, setStats] = useState<DashboardStats>({
     totalEmployees: 0,
     totalCompanies: 0,
@@ -304,7 +315,7 @@ function AdminDashboard() {
           
           if (daysRemaining <= 30) {
             visaAlerts.push({
-              employeeId: employee.employee_id || employee.id,
+              employeeId: employee.employee_id || employee.id || 'unknown',
               employeeName: employee.name,
               expiryDate: employee.visa_expiry_date,
               daysRemaining,
@@ -395,6 +406,15 @@ function AdminDashboard() {
       const urgentRenewals = companySummary.reduce((sum, company) => sum + company.urgent_renewals, 0);
       const expiringVisas = visaAlerts.length;
 
+      // Get real document count from database
+      const { count: realDocumentCount, error: docCountError } = await supabase
+        .from('employee_documents')
+        .select('*', { count: 'exact', head: true });
+      
+      if (docCountError) {
+        console.error('Error fetching document count:', docCountError);
+      }
+
       setStats({
         totalEmployees,
         activeEmployees,
@@ -402,7 +422,7 @@ function AdminDashboard() {
         totalTrades,
         urgentRenewals,
         expiringVisas,
-        documentsUploaded: totalEmployees * 2, // Estimate 2 docs per employee
+        documentsUploaded: realDocumentCount || 0,
         pendingApprovals: Math.floor(totalEmployees * 0.1), // 10% pending approvals
         recentNotifications: expiringVisas,
         companySummary,
@@ -418,6 +438,9 @@ function AdminDashboard() {
       console.log('Visa alerts:', visaAlerts.length);
     } catch (error) {
       console.error('❌ Error loading dashboard data:', error);
+      setSnackbarMessage(`❌ Test failed: ${(error as Error).message || 'Unknown error'}`);
+      setSnackbarType('error');
+      setSnackbarVisible(true);
     }
   };
 
@@ -450,6 +473,30 @@ function AdminDashboard() {
     outline: safeThemeAccess.colors(theme, 'outline'),
   };
 
+  // Test Visa Automation Function
+  const testVisaAutomation = async () => {
+    setTestingVisa(true);
+    try {
+      const result = await VisaAutomationService.testVisaAutomation();
+      
+      if (result.success) {
+        setSnackbarMessage(result.message);
+        setSnackbarType('success');
+      } else {
+        setSnackbarMessage(result.message);
+        setSnackbarType('error');
+      }
+      setSnackbarVisible(true);
+    } catch (error) {
+      console.error('Visa automation test failed:', error);
+      setSnackbarMessage(`❌ Test failed: ${(error as Error).message || 'Unknown error'}`);
+      setSnackbarType('error');
+      setSnackbarVisible(true);
+    } finally {
+      setTestingVisa(false);
+    }
+  };
+
   const quickActions = [
     {
       title: 'Add Employee',
@@ -466,11 +513,12 @@ function AdminDashboard() {
       badge: stats.documentsUploaded.toString(),
     },
     {
-      title: 'Import Data',
-      icon: 'database-import',
-      color: CONSISTENT_COLORS.tertiary,
-      onPress: () => router.push('/(admin)/import'),
-      badge: null,
+      title: 'Test Visa Automation',
+      icon: 'email-send',
+      color: CONSISTENT_COLORS.ferrari,
+      onPress: testVisaAutomation,
+      badge: testingVisa ? 'Testing...' : null,
+      loading: testingVisa,
     },
     {
       title: 'User Approvals',
@@ -481,8 +529,8 @@ function AdminDashboard() {
     },
     {
       title: 'Send Notifications',
-      icon: 'email-send',
-      color: CONSISTENT_COLORS.ferrari,
+      icon: 'bell-ring',
+      color: CONSISTENT_COLORS.tertiary,
       onPress: () => router.push('/(admin)/notifications'),
       badge: stats.recentNotifications > 0 ? stats.recentNotifications.toString() : null,
     },
@@ -753,85 +801,93 @@ function AdminDashboard() {
 
         {/* Key Metrics Cards */}
         <View style={styles.metricsContainer}>
-          <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
-            <View style={styles.metricContent}>
-              <View style={[styles.metricIcon, { backgroundColor: safeThemeAccess.colors(theme, 'primaryContainer') }]}>
-                <IconButton icon="account-group" size={28} iconColor={safeThemeAccess.colors(theme, 'onPrimaryContainer')} />
+          <AnimatedFadeSlide delay={0}>
+            <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
+              <View style={styles.metricContent}>
+                <View style={[styles.metricIcon, { backgroundColor: safeThemeAccess.colors(theme, 'primaryContainer') }]}>
+                  <IconButton icon="account-group" size={28} iconColor={safeThemeAccess.colors(theme, 'onPrimaryContainer')} />
+                </View>
+                <View style={styles.metricInfo}>
+                  <Text variant="headlineSmall" style={[styles.metricValue, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+                    {stats.totalEmployees}
+                  </Text>
+                  <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
+                    Total Employees
+                  </Text>
+                  <Text variant="bodySmall" style={[styles.metricChange, { color: safeThemeAccess.colors(theme, 'primary') }]}>
+                    {stats.activeEmployees} Active
+                  </Text>
+                </View>
               </View>
-              <View style={styles.metricInfo}>
-                <Text variant="headlineSmall" style={[styles.metricValue, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
-                  {stats.totalEmployees}
-                </Text>
-                <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
-                  Total Employees
-                </Text>
-                <Text variant="bodySmall" style={[styles.metricChange, { color: safeThemeAccess.colors(theme, 'primary') }]}>
-                  {stats.activeEmployees} Active
-                </Text>
-              </View>
-            </View>
-          </Surface>
+            </Surface>
+          </AnimatedFadeSlide>
 
-          <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
-            <View style={styles.metricContent}>
-              <View style={[styles.metricIcon, { backgroundColor: stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'errorContainer') : safeThemeAccess.colors(theme, 'tertiaryContainer') }]}>
-                <IconButton 
-              icon="alert-circle"
-                  size={28} 
-                  iconColor={stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'onErrorContainer') : safeThemeAccess.colors(theme, 'onTertiaryContainer')} 
-                />
+          <AnimatedFadeSlide delay={100}>
+            <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
+              <View style={styles.metricContent}>
+                <View style={[styles.metricIcon, { backgroundColor: stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'errorContainer') : safeThemeAccess.colors(theme, 'tertiaryContainer') }]}>
+                  <IconButton 
+                icon="alert-circle"
+                    size={28} 
+                    iconColor={stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'onErrorContainer') : safeThemeAccess.colors(theme, 'onTertiaryContainer')} 
+                  />
+                </View>
+                <View style={styles.metricInfo}>
+                  <Text variant="headlineSmall" style={[styles.metricValue, { color: stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'error') : safeThemeAccess.colors(theme, 'onSurface') }]}>
+                    {stats.expiringVisas}
+                  </Text>
+                  <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
+                    Visas Expiring
+                  </Text>
+                  <Text variant="bodySmall" style={[styles.metricChange, { color: stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'error') : safeThemeAccess.colors(theme, 'tertiary') }]}>
+                    Next 30 days
+                  </Text>
+                </View>
               </View>
-              <View style={styles.metricInfo}>
-                <Text variant="headlineSmall" style={[styles.metricValue, { color: stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'error') : safeThemeAccess.colors(theme, 'onSurface') }]}>
-                  {stats.expiringVisas}
-                </Text>
-                <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
-                  Visas Expiring
-                </Text>
-                <Text variant="bodySmall" style={[styles.metricChange, { color: stats.expiringVisas > 0 ? safeThemeAccess.colors(theme, 'error') : safeThemeAccess.colors(theme, 'tertiary') }]}>
-                  Next 30 days
-                </Text>
-              </View>
-            </View>
-          </Surface>
+            </Surface>
+          </AnimatedFadeSlide>
 
-          <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
-            <View style={styles.metricContent}>
-              <View style={[styles.metricIcon, { backgroundColor: safeThemeAccess.colors(theme, 'secondaryContainer') }]}>
-                <IconButton icon="chart-line" size={28} iconColor={safeThemeAccess.colors(theme, 'onSecondaryContainer')} />
+          <AnimatedFadeSlide delay={200}>
+            <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
+              <View style={styles.metricContent}>
+                <View style={[styles.metricIcon, { backgroundColor: safeThemeAccess.colors(theme, 'secondaryContainer') }]}>
+                  <IconButton icon="chart-line" size={28} iconColor={safeThemeAccess.colors(theme, 'onSecondaryContainer')} />
+                </View>
+                <View style={styles.metricInfo}>
+                  <Text variant="headlineSmall" style={[styles.metricValue, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+                    {((stats.activeEmployees / Math.max(stats.totalEmployees, 1)) * 100).toFixed(0)}%
+                  </Text>
+                  <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
+                    Active Rate
+                  </Text>
+                  <Text variant="bodySmall" style={[styles.metricChange, { color: safeThemeAccess.colors(theme, 'secondary') }]}>
+                    Employee retention
+                  </Text>
+                </View>
               </View>
-              <View style={styles.metricInfo}>
-                <Text variant="headlineSmall" style={[styles.metricValue, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
-                  {((stats.activeEmployees / Math.max(stats.totalEmployees, 1)) * 100).toFixed(0)}%
-                </Text>
-                <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
-                  Active Rate
-                </Text>
-                <Text variant="bodySmall" style={[styles.metricChange, { color: safeThemeAccess.colors(theme, 'secondary') }]}>
-                  Employee retention
-                </Text>
-              </View>
-            </View>
-          </Surface>
+            </Surface>
+          </AnimatedFadeSlide>
 
-          <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
-            <View style={styles.metricContent}>
-              <View style={[styles.metricIcon, { backgroundColor: safeThemeAccess.colors(theme, 'tertiaryContainer') }]}>
-                <IconButton icon="file-document-multiple" size={28} iconColor={safeThemeAccess.colors(theme, 'onTertiaryContainer')} />
+          <AnimatedFadeSlide delay={300}>
+            <Surface style={[styles.metricCard, { backgroundColor: safeThemeAccess.colors(theme, 'surface') }]} elevation={3}>
+              <View style={styles.metricContent}>
+                <View style={[styles.metricIcon, { backgroundColor: safeThemeAccess.colors(theme, 'tertiaryContainer') }]}>
+                  <IconButton icon="file-document-multiple" size={28} iconColor={safeThemeAccess.colors(theme, 'onTertiaryContainer')} />
+                </View>
+                <View style={styles.metricInfo}>
+                  <Text variant="headlineSmall" style={[styles.metricValue, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
+                    {stats.documentsUploaded}
+                  </Text>
+                  <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
+                    Documents
+                  </Text>
+                  <Text variant="bodySmall" style={[styles.metricChange, { color: safeThemeAccess.colors(theme, 'tertiary') }]}>
+                    Total uploaded
+                  </Text>
+                </View>
               </View>
-              <View style={styles.metricInfo}>
-                <Text variant="headlineSmall" style={[styles.metricValue, { color: safeThemeAccess.colors(theme, 'onSurface') }]}>
-                  {stats.documentsUploaded}
-                </Text>
-                <Text variant="bodyMedium" style={[styles.metricLabel, { color: safeThemeAccess.colors(theme, 'onSurfaceVariant') }]}>
-                  Documents
-                </Text>
-                <Text variant="bodySmall" style={[styles.metricChange, { color: safeThemeAccess.colors(theme, 'tertiary') }]}>
-                  Total uploaded
-                </Text>
-              </View>
-            </View>
-          </Surface>
+            </Surface>
+          </AnimatedFadeSlide>
           </View>
 
         {/* Visa Expiry Alerts */}
@@ -931,7 +987,7 @@ function AdminDashboard() {
                   <Text variant="titleSmall" style={{ color: safeThemeAccess.colors(theme, 'onSurface'), textAlign: 'center', marginTop: 8, fontWeight: '600' }}>
                     {action.title}
                   </Text>
-            <Button
+                  <Button
                     mode="contained"
                     onPress={() => {
                       triggerSuccessAnimation();
@@ -941,9 +997,11 @@ function AdminDashboard() {
                     buttonColor={action.color}
                     contentStyle={{ paddingVertical: 2 }}
                     compact
+                    loading={action.loading}
+                    disabled={action.loading}
                   >
-                    Open
-            </Button>
+                    {action.loading ? 'Testing...' : 'Open'}
+                  </Button>
                 </Card.Content>
               </Card>
             </Animated.View>
@@ -1112,6 +1170,16 @@ function AdminDashboard() {
           </Surface>
         </Modal>
       </Portal>
+
+      {/* Snackbar */}
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+        style={{ backgroundColor: snackbarType === 'success' ? theme.colors.success : theme.colors.error }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </AdminLayout>
   );
 }
@@ -1119,10 +1187,244 @@ function AdminDashboard() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f5f5f5',
   },
-  centerContent: {
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+  },
+  header: {
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#666666',
+    lineHeight: 24,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 24,
+    gap: 16,
+  },
+  statCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    flex: 1,
+    minWidth: 150,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  statCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  statIcon: {
+    marginRight: 12,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#666666',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statTrend: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  chartSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 16,
+  },
+  chartCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  chartContainer: {
+    height: 200,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  chartPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    padding: 40,
+  },
+  chartPlaceholderText: {
+    fontSize: 16,
+    color: '#666666',
+    textAlign: 'center',
+  },
+  quickActionsSection: {
+    marginBottom: 24,
+  },
+  quickActionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  quickActionCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    flex: 1,
+    minWidth: 140,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  quickActionIcon: {
+    marginBottom: 8,
+  },
+  quickActionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1a1a1a',
+    textAlign: 'center',
+  },
+  recentActivitySection: {
+    marginBottom: 24,
+  },
+  activityCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  activityIcon: {
+    marginRight: 12,
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1a1a1a',
+    marginBottom: 2,
+  },
+  activityTime: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  alertsSection: {
+    marginBottom: 24,
+  },
+  alertCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  alertItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  alertIcon: {
+    marginRight: 12,
+  },
+  alertContent: {
+    flex: 1,
+  },
+  alertTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  alertDescription: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  alertAction: {
+    marginLeft: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 48,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#dc3545',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '500',
   },
   heroSection: {
     padding: width < 768 ? 20 : 32,
@@ -1218,81 +1520,6 @@ const styles = StyleSheet.create({
     fontSize: width < 768 ? 11 : 13,
     fontWeight: '600',
   },
-  section: {
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 16,
-  },
-  alertsScroll: {
-    marginBottom: 24,
-    paddingHorizontal: 20,
-  },
-  alertCard: {
-    width: 160,
-    marginRight: 12,
-    borderRadius: 12,
-  },
-  alertContent: {
-    alignItems: 'center',
-  },
-  urgencyBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: 'stretch',
-    alignItems: 'center',
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 32,
-    gap: width < 768 ? 16 : 12,
-    paddingHorizontal: width < 768 ? 8 : 8,
-    justifyContent: width < 768 ? 'space-between' : 'flex-start',
-  },
-  actionCard: {
-    width: width > 768 ? (width - 92) / 3 : (width - 64) / 2,
-    borderRadius: 16,
-    minHeight: width < 768 ? 140 : 130,
-    maxWidth: width < 768 ? 180 : 200,
-    marginBottom: width < 768 ? 12 : 8,
-  },
-  actionContent: {
-    alignItems: 'center',
-    paddingVertical: width < 768 ? 16 : 16,
-    height: '100%',
-    justifyContent: 'space-between',
-    paddingHorizontal: width < 768 ? 12 : 16,
-  },
-  actionHeader: {
-    position: 'relative',
-    alignItems: 'center',
-  },
-  actionIcon: {
-    margin: 0,
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    minWidth: 20,
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 16,
-  },
   tradesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1376,32 +1603,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
-  },
-  chartContainer: {
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  chartHeader: {
-    marginBottom: 12,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  chartSubtitle: {
-    fontSize: 12,
-  },
-  expandButton: {
-    padding: 12,
-    alignItems: 'center',
-    borderRadius: 12,
-    marginTop: 12,
-  },
-  expandText: {
-    fontSize: 14,
-    fontWeight: 'bold',
   },
   modalContainer: {
     flex: 1,
@@ -1538,6 +1739,74 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     borderRadius: 12,
+  },
+  chartHeader: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginBottom: 4,
+  },
+  chartSubtitle: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+  },
+  expandButton: {
+    marginTop: 12,
+    alignSelf: 'center',
+  },
+  expandText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  alertsScroll: {
+    maxHeight: 200,
+  },
+  urgencyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  actionCard: {
+    marginBottom: 12,
+  },
+  actionContent: {
+    padding: 16,
+  },
+  actionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  actionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 16,
+    alignItems: 'center',
   },
 });
 

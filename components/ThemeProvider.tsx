@@ -4,7 +4,6 @@ import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lightTheme, darkTheme, CustomTheme } from '../theme';
 import { Platform } from 'react-native';
-import { handleKeyboardBehavior } from '../utils/mobileUtils';
 
 // Theme Context - Single source of truth
 interface ThemeContextType {
@@ -97,21 +96,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
     };
     loadThemePreference();
-  }, []);
-
-  // Setup mobile keyboard behavior
-  useEffect(() => {
-    let cleanup: (() => void) | undefined;
-    
-    if (Platform.OS === 'web') {
-      cleanup = handleKeyboardBehavior();
-    }
-
-    return () => {
-      if (cleanup) {
-        cleanup();
-      }
-    };
   }, []);
 
   const toggleTheme = async () => {

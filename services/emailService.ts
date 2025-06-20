@@ -360,7 +360,7 @@ export async function testEmailConfiguration(): Promise<boolean> {
       company_id: 'cubs_tech',
       join_date: '2024-01-01',
       visa_status: 'EXPIRY',
-      passport_number: 'TEST123456',
+      passport_no: 'TEST123456',
       status: 'Active',
       is_active: true
     };

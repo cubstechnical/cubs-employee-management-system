@@ -1,0 +1,491 @@
+/* ============================================
+   COMPREHENSIVE LAYOUT FIXES - NO OVERLAPPING
+   ============================================ */
+
+/* ========== GLOBAL LAYOUT FIXES ========== */
+
+/* Ensure all positioned elements have proper z-index hierarchy */
+.app-container {
+  position: relative;
+  z-index: 1;
+}
+
+/* Main content areas */
+.main-content {
+  position: relative;
+  z-index: 10;
+  padding-bottom: 80px; /* Space for FAB */
+}
+
+/* ========== MODAL & OVERLAY FIXES ========== */
+
+/* Modal backdrop - highest priority */
+.modal-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Modal content */
+.modal-content {
+  position: relative !important;
+  z-index: 10000 !important;
+  background: white !important;
+  border-radius: 12px !important;
+  max-width: 90vw !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+  margin: 16px !important;
+}
+
+/* Loading overlays */
+.loading-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  z-index: 8000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Success/Error overlays */
+.success-overlay,
+.error-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  z-index: 9500 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.success-container,
+.error-container {
+  background: white !important;
+  padding: 24px !important;
+  border-radius: 12px !important;
+  margin: 16px !important;
+  max-width: 400px !important;
+  text-align: center !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ========== FAB & FLOATING ELEMENTS ========== */
+
+/* Floating Action Button */
+.fab,
+[data-testid*="fab"] {
+  position: fixed !important;
+  bottom: 16px !important;
+  right: 16px !important;
+  z-index: 7000 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Ensure FAB doesn't overlap with other content */
+.content-with-fab {
+  padding-bottom: 80px !important;
+}
+
+/* Floating menus */
+.floating-menu {
+  position: fixed !important;
+  z-index: 7500 !important;
+}
+
+/* ========== DASHBOARD LAYOUT FIXES ========== */
+
+/* Dashboard container */
+.dashboard-container {
+  position: relative !important;
+  z-index: 10 !important;
+  padding: 16px !important;
+  padding-bottom: 80px !important; /* Space for FAB */
+}
+
+/* Metrics grid - prevent overlapping */
+.metrics-grid {
+  display: grid !important;
+  gap: 16px !important;
+  margin-bottom: 24px !important;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)) !important;
+}
+
+@media (max-width: 768px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+}
+
+/* Metric cards */
+.metric-card {
+  position: relative !important;
+  z-index: 20 !important;
+  background: white !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  min-height: 120px !important;
+}
+
+/* Charts container */
+.charts-container {
+  display: grid !important;
+  gap: 16px !important;
+  margin-bottom: 24px !important;
+  grid-template-columns: 1fr !important;
+}
+
+@media (min-width: 768px) {
+  .charts-container {
+    grid-template-columns: 2fr 1fr !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  .charts-container {
+    grid-template-columns: 2fr 1fr 1fr !important;
+  }
+}
+
+.chart-card {
+  position: relative !important;
+  z-index: 20 !important;
+  background: white !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ========== SIDEBAR & NAVIGATION FIXES ========== */
+
+/* Sidebar overlay */
+.sidebar-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  z-index: 5000 !important;
+}
+
+/* Sidebar */
+.sidebar {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  bottom: 0 !important;
+  width: 280px !important;
+  max-width: 85vw !important;
+  background: white !important;
+  z-index: 5500 !important;
+  transform: translateX(-100%) !important;
+  transition: transform 0.3s ease !important;
+}
+
+.sidebar.open {
+  transform: translateX(0) !important;
+}
+
+/* ========== TABLE & LIST FIXES ========== */
+
+/* Employee table */
+.employee-table-container {
+  position: relative !important;
+  z-index: 20 !important;
+  background: white !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+  margin-bottom: 24px !important;
+}
+
+.employee-table {
+  width: 100% !important;
+  border-collapse: collapse !important;
+  table-layout: fixed !important;
+}
+
+.employee-table th,
+.employee-table td {
+  padding: 12px 8px !important;
+  text-align: left !important;
+  border-bottom: 1px solid #f0f0f0 !important;
+  vertical-align: middle !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+/* Column widths to prevent overlapping */
+.employee-table .col-name { width: 25% !important; min-width: 150px !important; }
+.employee-table .col-trade { width: 15% !important; min-width: 100px !important; }
+.employee-table .col-company { width: 20% !important; min-width: 120px !important; }
+.employee-table .col-visa { width: 15% !important; min-width: 110px !important; }
+.employee-table .col-status { width: 12% !important; min-width: 90px !important; }
+.employee-table .col-actions { width: 13% !important; min-width: 80px !important; text-align: center !important; }
+
+/* ========== FORM & INPUT FIXES ========== */
+
+/* Form containers */
+.form-container {
+  position: relative !important;
+  z-index: 20 !important;
+  background: white !important;
+  border-radius: 12px !important;
+  padding: 20px !important;
+  margin-bottom: 16px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Input fields */
+.input-field {
+  position: relative !important;
+  z-index: 25 !important;
+  margin-bottom: 16px !important;
+}
+
+/* Dropdown menus */
+.dropdown-menu {
+  position: absolute !important;
+  top: 100% !important;
+  left: 0 !important;
+  right: 0 !important;
+  background: white !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
+  z-index: 6000 !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+}
+
+/* ========== NOTIFICATION & TOAST FIXES ========== */
+
+/* Toast notifications */
+.toast-container {
+  position: fixed !important;
+  bottom: 80px !important; /* Above FAB */
+  left: 16px !important;
+  right: 16px !important;
+  z-index: 8500 !important;
+}
+
+.toast {
+  background: #333 !important;
+  color: white !important;
+  padding: 12px 16px !important;
+  border-radius: 8px !important;
+  margin-bottom: 8px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Snackbar */
+.snackbar {
+  position: fixed !important;
+  bottom: 80px !important; /* Above FAB */
+  left: 16px !important;
+  right: 16px !important;
+  z-index: 8500 !important;
+}
+
+/* ========== BADGE & CHIP FIXES ========== */
+
+/* Badges */
+.badge {
+  position: absolute !important;
+  top: -4px !important;
+  right: -4px !important;
+  z-index: 100 !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+/* Chips container */
+.chips-container {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin: 8px 0 !important;
+}
+
+.chip {
+  position: relative !important;
+  z-index: 30 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 4px 12px !important;
+  border-radius: 16px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+}
+
+/* ========== MOBILE SPECIFIC FIXES ========== */
+
+@media (max-width: 768px) {
+  /* Adjust main content padding for mobile */
+  .main-content {
+    padding: 8px !important;
+    padding-bottom: 80px !important;
+  }
+
+  /* Mobile modal adjustments */
+  .modal-content {
+    max-width: 95vw !important;
+    max-height: 85vh !important;
+    margin: 8px !important;
+  }
+
+  /* Mobile table adjustments */
+  .employee-table th,
+  .employee-table td {
+    padding: 8px 4px !important;
+    font-size: 14px !important;
+  }
+
+  /* Mobile metrics grid */
+  .metrics-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  .metric-card {
+    padding: 12px !important;
+    min-height: 100px !important;
+  }
+
+  /* Mobile charts */
+  .charts-container {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Mobile forms */
+  .form-container {
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+  }
+
+  /* Mobile toast positioning */
+  .toast-container,
+  .snackbar {
+    bottom: 16px !important;
+    left: 8px !important;
+    right: 8px !important;
+  }
+
+  /* Mobile FAB */
+  .fab {
+    bottom: 16px !important;
+    right: 16px !important;
+    width: 56px !important;
+    height: 56px !important;
+  }
+}
+
+/* ========== PREVENT COMMON OVERLAPPING ISSUES ========== */
+
+/* Ensure all interactive elements have proper spacing */
+button,
+.button,
+[role="button"] {
+  position: relative !important;
+  z-index: 50 !important;
+  margin: 2px !important;
+}
+
+/* Ensure all cards have proper spacing */
+.card,
+[data-testid*="card"] {
+  position: relative !important;
+  z-index: 20 !important;
+  margin-bottom: 12px !important;
+}
+
+/* Ensure all lists have proper spacing */
+.list-item,
+[data-testid*="list-item"] {
+  position: relative !important;
+  z-index: 25 !important;
+  margin-bottom: 1px !important;
+}
+
+/* Prevent text overflow */
+.text-container {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  word-wrap: break-word !important;
+}
+
+/* ========== ACCESSIBILITY & FOCUS FIXES ========== */
+
+/* Focus indicators */
+*:focus {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+  z-index: 1000 !important;
+}
+
+/* Skip to content link */
+.skip-link {
+  position: absolute !important;
+  top: -40px !important;
+  left: 6px !important;
+  background: #3b82f6 !important;
+  color: white !important;
+  padding: 8px !important;
+  text-decoration: none !important;
+  z-index: 10000 !important;
+}
+
+.skip-link:focus {
+  top: 6px !important;
+}
+
+/* ========== PRINT STYLES ========== */
+
+@media print {
+  .fab,
+  .modal-backdrop,
+  .sidebar,
+  .sidebar-overlay,
+  .floating-menu,
+  .toast-container,
+  .snackbar {
+    display: none !important;
+  }
+
+  .main-content {
+    padding: 0 !important;
+  }
+
+  .metric-card,
+  .chart-card,
+  .form-container {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+} 

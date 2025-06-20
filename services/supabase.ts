@@ -69,41 +69,41 @@ export interface Database {
 
 // Employee interface
 export interface Employee {
-  employee_id?: string;
+  id: string;
+  employee_id: string;
   name: string;
-  dob?: string;
   trade: string;
   nationality: string;
+  date_of_birth: string;
+  mobile_number: string;
+  home_phone_number: string | null;
+  email_id: string;
+  company_id: string;
+  company_name: string;
+  join_date: string;
+  visa_expiry_date: string;
+  visa_status: string;
+  passport_no: string;
+  status: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  
+  // Legacy fields for backward compatibility
+  dob?: string;
   joining_date?: string;
-  passport_no?: string;
   passport_expiry?: string;
   labourcard_no?: string;
   labourcard_expiry?: string;
   visastamping_date?: string;
-  visa_expiry_date?: string;
   eid?: string;
   leave_date?: string;
   wcc?: string;
   lulu_wps_card?: string;
   basic_salary?: string;
-  company_name: string;
-  created_at?: string;
-  updated_at?: string;
   passport_number?: string;
   visa_number?: string;
   visa_type?: string;
-  visa_status?: string;
-  
-  // Legacy/computed fields for compatibility
-  id?: string;
-  date_of_birth?: string;
-  mobile_number?: string;
-  home_phone_number?: string;
-  email_id?: string;
-  company_id?: string;
-  join_date?: string;
-  status?: string;
-  is_active?: boolean;
 }
 
 // EmployeeDocument interface

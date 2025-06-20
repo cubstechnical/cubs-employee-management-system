@@ -1,0 +1,24 @@
+# n8n Configuration Template
+# Copy this to .env.n8n and fill in your values
+
+N8N_USER=admin
+N8N_PASSWORD=secure_password_here
+N8N_ENCRYPTION_KEY=generate_a_32_character_key_here
+N8N_DB_USER=n8n_user
+N8N_DB_PASSWORD=n8n_password_here
+
+# Supabase Configuration (for n8n to connect to your existing DB)
+SUPABASE_DB_NAME=postgres
+SUPABASE_DB_USER=your_supabase_user
+SUPABASE_DB_PASSWORD=your_supabase_password
+
+# Service API Keys (for n8n workflows)
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_KEY=your_supabase_service_key
+SENDGRID_API_KEY=your_sendgrid_api_key
+BACKBLAZE_APPLICATION_KEY_ID=your_backblaze_key_id
+BACKBLAZE_APPLICATION_KEY=your_backblaze_key
+
+# OpenAI for AI workflows (optional)
+OPENAI_API_KEY=your_openai_api_key 

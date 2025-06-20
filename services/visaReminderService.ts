@@ -162,7 +162,7 @@ export async function processAutomaticReminders(schedule: ReminderSchedule): Pro
     // Log each reminder attempt
     for (const detail of emailResults.details) {
       await logReminderActivity(
-        detail.employee.id,
+        detail.employee.id || detail.employee.employee_id || 'unknown',
         schedule.name,
         detail.success,
         detail.error

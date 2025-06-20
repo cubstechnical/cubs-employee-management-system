@@ -266,7 +266,7 @@ function EmployeeProfileScreen() {
           <View style={styles.infoGrid}>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Passport Number</Text>
-              <Text style={styles.infoValue}>{employee.passport_number || 'Not provided'}</Text>
+              <Text style={styles.infoValue}>{employee.passport_no || 'Not provided'}</Text>
             </View>
             <View style={styles.infoItem}>
               <Text style={styles.infoLabel}>Visa Status</Text>

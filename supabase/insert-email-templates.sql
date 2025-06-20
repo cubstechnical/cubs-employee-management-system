@@ -2,7 +2,7 @@
 -- Run this AFTER running the main schema file
 
 -- Insert basic email templates
-INSERT INTO public.email_templates (name, type, subject, content, days_threshold, is_active) VALUES
+INSERT INTO public.email_templates (name, type, subject, content, variables, days_threshold, is_active) VALUES
 (
     'Visa Expiry - 90 Days Notice',
     'visa_reminder',
@@ -18,6 +18,7 @@ INSERT INTO public.email_templates (name, type, subject, content, days_threshold
         </div>
         <p>This is an advance notice that the visa will expire in {{days_remaining}} days. Please begin renewal preparations.</p>
     </div>',
+    ARRAY['employee_name', 'employee_id', 'company_name', 'visa_expiry_date', 'days_remaining'],
     90,
     true
 ),
@@ -36,6 +37,7 @@ INSERT INTO public.email_templates (name, type, subject, content, days_threshold
         </div>
         <p>Warning: The visa will expire in {{days_remaining}} days. Please start the renewal process immediately.</p>
     </div>',
+    ARRAY['employee_name', 'employee_id', 'company_name', 'visa_expiry_date', 'days_remaining'],
     60,
     true
 ),
@@ -54,6 +56,7 @@ INSERT INTO public.email_templates (name, type, subject, content, days_threshold
         </div>
         <p>Urgent: The visa will expire in {{days_remaining}} days. Immediate action required for renewal.</p>
     </div>',
+    ARRAY['employee_name', 'employee_id', 'company_name', 'visa_expiry_date', 'days_remaining'],
     30,
     true
 ),
@@ -72,6 +75,7 @@ INSERT INTO public.email_templates (name, type, subject, content, days_threshold
         </div>
         <p style="color: #ea580c; font-weight: bold;">URGENT: The visa expires in {{days_remaining}} days! Immediate action required!</p>
     </div>',
+    ARRAY['employee_name', 'employee_id', 'company_name', 'visa_expiry_date', 'days_remaining'],
     7,
     true
 ),
@@ -90,6 +94,7 @@ INSERT INTO public.email_templates (name, type, subject, content, days_threshold
         </div>
         <p style="color: #dc2626; font-weight: bold;">CRITICAL: The visa expires TOMORROW! Emergency action required!</p>
     </div>',
+    ARRAY['employee_name', 'employee_id', 'company_name', 'visa_expiry_date', 'days_remaining'],
     1,
     true
 )

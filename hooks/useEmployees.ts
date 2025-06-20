@@ -282,7 +282,15 @@ export const useEmployees = create<EmployeesState>((set, get) => ({
   fetchStats: async () => {
     try {
       const stats = await employeeService.getEmployeeStats();
-      set({ stats });
+      // Map the service stats to the expected interface
+      const mappedStats = {
+        total: stats.total,
+        active: stats.active,
+        expiring: stats.visaExpiring,
+        expired: stats.visaExpired,
+        companiesCount: 0, // We'll need to calculate this separately if needed
+      };
+      set({ stats: mappedStats });
     } catch (error) {
       console.error('Error fetching employee stats:', error);
       // Don't throw here as stats are not critical

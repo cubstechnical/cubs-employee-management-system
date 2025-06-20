@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Dimensions, RefreshControl, TouchableOpacity, Platform, Animated, Alert, Switch } from 'react-native';
 import {
   Text,
@@ -19,17 +19,22 @@ import {
   DataTable,
   List,
   SegmentedButtons,
-  Snackbar
+  Snackbar,
+  Avatar,
+  Badge
 } from 'react-native-paper';
 import { Picker } from '@react-native-picker/picker';
 import { router } from 'expo-router';
 import { useEmployees } from '../../hooks/useEmployees';
+import { usePaginatedEmployees } from '../../hooks/usePaginatedEmployees';
 import AdminLayout from '../../components/AdminLayout';
 import { CustomTheme } from '../../theme';
 import { Employee } from '../../types/employee';
 import { sendVisaExpiryReminders } from '../../services/emailService';
+import { getDeviceInfo, getResponsiveSpacing, performanceUtils } from '../../utils/mobileUtils';
 
 const { width } = Dimensions.get('window');
+const isMobile = width < 768;
 
 // Real CUBS company names from the database
 const DEFAULT_COMPANIES = [
@@ -119,7 +124,7 @@ export default function EmployeesScreen() {
     company_name: '',
     join_date: '',
     visa_expiry_date: '',
-    passport_number: '',
+    passport_no: '',
     employee_id: '',
     visa_status: 'ACTIVE',
   });
@@ -281,7 +286,7 @@ export default function EmployeesScreen() {
         company_name: newEmployee.company_name || 'CUBS Technical', // Keep for display
         join_date: newEmployee.join_date ? parseDDMMYYYY(newEmployee.join_date) : null,
         visa_expiry_date: newEmployee.visa_expiry_date ? parseDDMMYYYY(newEmployee.visa_expiry_date) : null,
-        passport_number: newEmployee.passport_number || '',
+        passport_no: newEmployee.passport_no || '',
         status: 'Active', // Required by schema
         is_active: true,
         // visa_status will be calculated automatically by the service
@@ -303,7 +308,7 @@ export default function EmployeesScreen() {
     }
   };
 
-  const handleEditEmployee = (employee: Employee) => {
+  const handleEdit = (employee: Employee) => {
     setEditingEmployee(employee);
     setNewEmployee({
       name: employee.name || '',
@@ -315,7 +320,7 @@ export default function EmployeesScreen() {
       company_name: employee.company_name || '',
       join_date: formatDateDDMMYYYY(employee.join_date || ''),
       visa_expiry_date: formatDateDDMMYYYY(employee.visa_expiry_date || ''),
-      passport_number: employee.passport_number || '',
+      passport_no: employee.passport_no || '',
       employee_id: employee.employee_id || '',
       visa_status: getVisaStatusFromDate(employee.visa_expiry_date || ''),
     });
@@ -345,7 +350,7 @@ export default function EmployeesScreen() {
         company_name: newEmployee.company_name || 'CUBS Technical', // Keep for display
         join_date: newEmployee.join_date ? parseDDMMYYYY(newEmployee.join_date) : undefined,
         visa_expiry_date: newEmployee.visa_expiry_date ? parseDDMMYYYY(newEmployee.visa_expiry_date) : undefined,
-        passport_number: newEmployee.passport_number || '',
+        passport_no: newEmployee.passport_no || '',
         status: 'Active', // Required by schema
         // visa_status will be calculated automatically by the service
       };
@@ -383,14 +388,14 @@ export default function EmployeesScreen() {
   };
 
   // Multi-select functions
-  const handleSelectEmployee = (employeeId: string) => {
-    setSelectedEmployees(prev => {
-      const newSelection = prev.includes(employeeId)
-        ? prev.filter(id => id !== employeeId)
-        : [...prev, employeeId];
-      setShowBulkActions(newSelection.length > 0);
-      return newSelection;
-    });
+  const handleSelectEmployee = (employeeId: string | undefined) => {
+    if (!employeeId) return;
+    
+    if (selectedEmployees.includes(employeeId)) {
+      setSelectedEmployees(selectedEmployees.filter(id => id !== employeeId));
+    } else {
+      setSelectedEmployees([...selectedEmployees, employeeId]);
+    }
   };
 
   const handleSelectAllEmployees = () => {
@@ -450,7 +455,7 @@ export default function EmployeesScreen() {
 
       // Get selected employee objects
       const selectedEmployeeObjects = employees?.filter(emp => 
-        selectedEmployees.includes(emp.employee_id)
+        selectedEmployees.includes(emp.employee_id || '')
       ) || [];
 
       if (selectedEmployeeObjects.length === 0) {
@@ -496,7 +501,7 @@ export default function EmployeesScreen() {
       company_name: '',
       join_date: '',
       visa_expiry_date: '',
-      passport_number: '',
+      passport_no: '',
       employee_id: '',
       visa_status: 'ACTIVE',
     });
@@ -549,14 +554,17 @@ export default function EmployeesScreen() {
   };
 
   // Navigation helper - FIXED
-  const navigateToEmployeeDetails = (employeeId: string) => {
-    console.log('🔍 Navigating to employee details:', employeeId);
-    try {
-      router.push(`/(admin)/employees/${employeeId}`);
-    } catch (error) {
-      console.error('❌ Navigation error:', error);
-      setSnackbar('Failed to navigate to employee details');
+  const navigateToEmployeeDetails = (employee: Employee) => {
+    const employeeId = employee.employee_id || employee.id;
+    if (!employeeId) {
+      console.warn('No employee ID found for navigation');
+      return;
     }
+    
+    console.log('Navigating to employee details with ID:', employeeId);
+    
+    // Use router.push for both web and mobile
+    router.push(`/(admin)/employees/${employeeId}`);
   };
 
   const navigateToDocuments = (employeeId: string) => {
@@ -565,8 +573,8 @@ export default function EmployeesScreen() {
 
   // Completely redesign renderTableView with modern UI/UX
   const renderTableView = () => {
-    // Show all filtered employees without pagination
-    const displayEmployees = filteredEmployees;
+    // Show paginated employees (10 per page)
+    const displayEmployees = paginatedEmployees;
 
     const renderStatusChip = (status: string, type: 'visa' | 'employee') => {
       const getStatusConfig = () => {
@@ -601,7 +609,7 @@ export default function EmployeesScreen() {
           <View style={styles.headerLeft}>
             <View style={styles.titleContainer}>
               <Text style={styles.pageTitle}>Employee List</Text>
-              <Text style={styles.employeeCount}>({displayEmployees.length} employees)</Text>
+              <Text style={styles.employeeCount}>({filteredEmployees.length} employees)</Text>
             </View>
             <View style={styles.headerControls}>
               <View style={styles.entriesControl}>
@@ -721,76 +729,75 @@ export default function EmployeesScreen() {
                 </View>
               ) : (
                 displayEmployees.map((employee, index) => (
-                  <View
-                    key={employee.employee_id}
+                  <View 
+                    key={employee.id || index}
                     style={[
                       styles.dataTableRow,
-                      selectedEmployees.includes(employee.employee_id) && styles.selectedRow
+                      employee.employee_id && selectedEmployees.includes(employee.employee_id) && styles.selectedRow
                     ]}
                   >
                     <View style={styles.checkboxColumn}>
                       <TouchableOpacity 
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          handleSelectEmployee(employee.employee_id);
-                        }}
+                        style={styles.checkbox}
+                        onPress={() => handleSelectEmployee(employee.employee_id)}
                       >
-                        <View style={styles.checkbox}>
-                          {selectedEmployees.includes(employee.employee_id) && (
-                            <Text style={styles.checkmark}>✓</Text>
-                          )}
-                        </View>
+                        {employee.employee_id && selectedEmployees.includes(employee.employee_id) && (
+                          <Text style={styles.checkmark}>✓</Text>
+                        )}
                       </TouchableOpacity>
                     </View>
-                    
+
                     <View style={styles.employeeColumn}>
-                      <View style={styles.employeeInfo}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>
-                            {employee.name?.charAt(0)?.toUpperCase() || 'N'}
-                          </Text>
-                        </View>
-                        <View style={styles.employeeDetails}>
-                          <TouchableOpacity onPress={() => navigateToEmployeeDetails(employee.employee_id)}>
-                            <Text style={[styles.employeeName, styles.clickableEmployeeName]}>{employee.name}</Text>
-                          </TouchableOpacity>
-                          <Text style={styles.employeeId}>{employee.employee_id}</Text>
-                        </View>
-                      </View>
+                      <TouchableOpacity onPress={() => navigateToEmployeeDetails(employee)}>
+                        <Text style={[styles.cellText, styles.clickableEmployeeName]}>
+                          {employee.name || 'N/A'}
+                        </Text>
+                        <Text style={[styles.cellText, { fontSize: 12, color: '#666' }]}>
+                          ID: {employee.employee_id || 'N/A'}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
-                    
+
                     <View style={styles.tradeColumn}>
                       <Text style={styles.cellText}>{employee.trade || 'N/A'}</Text>
                     </View>
-                    
+
                     <View style={styles.nationalityColumn}>
                       <Text style={styles.cellText}>{employee.nationality || 'N/A'}</Text>
                     </View>
-                    
+
                     <View style={styles.passportColumn}>
-                      <Text style={styles.cellText}>{employee.passport_no || employee.passport_number || 'N/A'}</Text>
+                      <Text style={styles.cellText}>{employee.passport_no || 'N/A'}</Text>
                     </View>
-                    
+
                     <View style={styles.labourcardColumn}>
                       <Text style={styles.cellText}>{employee.labourcard_no || 'N/A'}</Text>
                     </View>
-                    
+
                     <View style={styles.eidColumn}>
                       <Text style={styles.cellText}>{employee.eid || 'N/A'}</Text>
                     </View>
-                    
+
                     <View style={styles.wccColumn}>
                       <Text style={styles.cellText}>{employee.wcc || 'N/A'}</Text>
                     </View>
-                    
+
                     <View style={styles.expiryColumn}>
                       <Text style={styles.cellText}>
-                        {formatDateDDMMYYYY(employee.visa_expiry_date)}
+                        {employee.visa_expiry_date ? formatDateDDMMYYYY(employee.visa_expiry_date) : 'N/A'}
                       </Text>
                     </View>
-                    
+
                     <View style={styles.visaStatusColumn}>
-                      {renderStatusChip(getVisaStatusFromDate(employee.visa_expiry_date), 'visa')}
+                      {employee.visa_expiry_date && renderStatusChip(getVisaStatusFromDate(employee.visa_expiry_date), 'visa')}
+                    </View>
+
+                    <View style={styles.actionsColumn}>
+                      <IconButton 
+                        icon="pencil" 
+                        size={16} 
+                        onPress={() => handleEdit(employee)} 
+                      />
                     </View>
                   </View>
                 ))
@@ -798,6 +805,62 @@ export default function EmployeesScreen() {
             </ScrollView>
           </View>
         </ScrollView>
+        
+        {/* Pagination Controls */}
+        <View style={styles.paginationContainer}>
+          <Text style={styles.paginationInfo}>
+            Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, filteredEmployees.length)} of {filteredEmployees.length} employees
+          </Text>
+          
+          <View style={styles.paginationControls}>
+            <TouchableOpacity
+              style={[styles.paginationButton, currentPage === 1 && { opacity: 0.5 }]}
+              onPress={() => currentPage > 1 && setCurrentPage(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <Text style={styles.paginationButtonText}>Previous</Text>
+            </TouchableOpacity>
+            
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 5) {
+                pageNum = i + 1;
+              } else if (currentPage <= 3) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 2) {
+                pageNum = totalPages - 4 + i;
+              } else {
+                pageNum = currentPage - 2 + i;
+              }
+              
+              return (
+                <TouchableOpacity
+                  key={pageNum}
+                  style={[
+                    styles.paginationButton,
+                    currentPage === pageNum && styles.paginationButtonActive
+                  ]}
+                  onPress={() => setCurrentPage(pageNum)}
+                >
+                  <Text style={[
+                    styles.paginationButtonText,
+                    currentPage === pageNum && styles.paginationButtonTextActive
+                  ]}>
+                    {pageNum}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            
+            <TouchableOpacity
+              style={[styles.paginationButton, currentPage === totalPages && { opacity: 0.5 }]}
+              onPress={() => currentPage < totalPages && setCurrentPage(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              <Text style={styles.paginationButtonText}>Next</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   };
@@ -1008,12 +1071,11 @@ export default function EmployeesScreen() {
                   
                   <TextInput
                     label="Passport Number"
-                    value={newEmployee.passport_number}
-                    onChangeText={(text) => setNewEmployee({...newEmployee, passport_number: text})}
+                    value={newEmployee.passport_no}
+                    onChangeText={(text) => setNewEmployee({...newEmployee, passport_no: text})}
                     style={styles.modernInput}
                     mode="outlined"
-                    left={<TextInput.Icon icon="passport" />}
-                    theme={{ colors: { primary: CONSISTENT_COLORS.primary } }}
+                    placeholder="Enter passport number"
                   />
                 </View>
 
@@ -1127,580 +1189,569 @@ export default function EmployeesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#f5f5f5',
   },
   headerControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(197, 48, 48, 0.1)',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#C53030',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-      },
-      android: {
-        elevation: 2,
-      },
-      web: {
-        boxShadow: '0px 2px 4px rgba(197,48,48,0.1)',
-      }
-    })
-      },
-    modernSearchBar: {
-    borderRadius: 12,
+  },
+  modernSearchBar: {
+    borderRadius: 8,
     elevation: 2,
-    backgroundColor: 'white',
+    backgroundColor: '#ffffff',
   },
   filterContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  filterButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    flex: 1,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 12,
+    marginBottom: 12,
+    paddingHorizontal: 16,
   },
   filterChip: {
-    marginRight: 8,
-    borderRadius: 20,
+    marginRight: 6,
+    marginBottom: 6,
   },
-  modernFilterButton: {
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#C53030', // Updated to new professional red
-  },
-  viewToggle: {
+  viewModeContainer: {
+    marginLeft: 'auto',
     flexDirection: 'row',
     alignItems: 'center',
   },
-  modernViewButton: {
-    borderRadius: 8,
-    backgroundColor: 'rgba(197, 48, 48, 0.1)', // Updated to new professional red
+  bulkActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    padding: 8,
+    borderRadius: 6,
+    marginVertical: 6,
+    marginHorizontal: 16,
   },
-  content: {
+  bulkActionsText: {
     flex: 1,
-    paddingBottom: 20,
-    minHeight: '80vh', // Ensure good minimum height
+    marginLeft: 6,
+    fontWeight: '600',
+    fontSize: 13,
+    color: '#1976D2',
   },
-  loadingContainer: {
+  gridContainer: {
+    padding: 12,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  employeeCard: {
+    flex: 1,
+    marginHorizontal: 3,
+    maxWidth: isMobile ? '100%' : '48%',
+    minWidth: isMobile ? '100%' : 280,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    marginBottom: 6,
+  },
+  employeeCardContent: {
+    padding: 10,
+  },
+  employeeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#2563EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  avatarText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  employeeInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  employeeName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 1,
+  },
+  clickableEmployeeName: {
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+  },
+  employeeId: {
+    fontSize: 11,
+    color: '#666666',
+  },
+  employeeDetails: {
+    flex: 1,
+    marginLeft: 8,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  detailLabel: {
+    fontSize: 10,
+    color: '#666666',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 10,
+    color: '#1a1a1a',
+    fontWeight: '500',
+    flex: 2,
+    textAlign: 'right',
+  },
+  statusChip: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  statusChipText: {
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  actionButton: {
+    marginLeft: 6,
+  },
+  emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 64,
+    padding: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2563EB',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: '#666666',
+    marginBottom: 16,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#666666',
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: 12,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 6,
+  },
+  emptyStateButton: {
+    marginTop: 6,
+    minWidth: 140,
   },
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
-    marginTop: 32,
   },
-  emptyStateTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  emptyStateButton: {
-    borderRadius: 8,
-    marginTop: 8,
-  },
-  modernFab: {
+  // SUCCESS OVERLAY STYLES (FIXED)
+  successOverlay: {
     position: 'absolute',
-    right: 16,
-    bottom: 16,
-    borderRadius: 16,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
+  successContainer: {
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    margin: 16,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  successText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#22C55E',
+    textAlign: 'center',
+  },
+  // MODAL STYLES (FIXED)
   modalContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 20,
+    padding: 16,
   },
   modernModal: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 0,
     width: '100%',
-    maxWidth: 600,
-    maxHeight: '90%',
-    padding: 24,
-    borderRadius: 20,
-  },
-  modalContent: {
-    maxHeight: 500,
+    maxWidth: 500,
+    maxHeight: Platform.OS === 'web' ? 500 : 400,
   },
   modalTitle: {
-    marginBottom: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
     textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalContent: {
+    maxHeight: Platform.OS === 'web' ? 300 : 250,
+    paddingHorizontal: 20,
   },
   formSection: {
-    marginBottom: 8,
+    marginBottom: 16,
   },
   sectionTitle: {
-    marginBottom: 16,
-    fontWeight: 'bold',
-  },
-  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
     marginBottom: 8,
-    fontWeight: '500',
   },
   modernInput: {
-    marginBottom: 16,
-    borderRadius: 12,
+    backgroundColor: '#f8f9fa',
+    marginBottom: 8,
   },
   dropdownContainer: {
-    marginBottom: 16,
+    marginBottom: 8,
   },
-  modernDropdownButton: {
-    marginBottom: 16,
-    justifyContent: 'flex-start',
-    borderRadius: 12,
-  },
-  dropdownContent: {
-    justifyContent: 'flex-start',
-    paddingHorizontal: 12,
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginBottom: 4,
   },
   sectionDivider: {
-    height: 1,
-    marginVertical: 20,
-  },
-  modernSegmentedButtons: {
-    marginBottom: 16,
-    borderRadius: 12,
+    marginVertical: 12,
   },
   modernModalActions: {
     flexDirection: 'row',
-    marginTop: 24,
-    gap: 12,
+    justifyContent: 'space-between',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   modernButton: {
-    borderRadius: 12,
-    paddingVertical: 4,
-  },
-  
-  // Modern Table Styles - Enhanced for full height and better UI
-  modernTableWrapper: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    pointerEvents: 'auto',
-  },
-  tableControlsHeader: {
-    backgroundColor: 'white',
+    borderRadius: 6,
+    paddingVertical: 10,
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
   },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  tableTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  employeeCount: {
-    fontSize: 14,
-    color: '#64748B',
-    marginLeft: 8,
-    fontWeight: '500',
-  },
-  filtersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-    alignItems: 'flex-end',
-  },
-  filterGroup: {
-    flex: 1,
-  },
-  filterLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 4,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  modernPicker: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    height: 40,
-  },
-  modernTableContainer: {
-    flex: 1,
-    backgroundColor: 'white',
-    margin: 0,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  tableHorizontalScroll: {
-    flex: 1,
-    minWidth: '100%',
-  },
-  tableContent: {
-    minWidth: '100%',
-  },
-  modernTableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#E2E8F0',
-    borderBottomWidth: 2,
-    borderBottomColor: '#CBD5E1',
-    paddingVertical: 18,
-  },
-  sortableHeaderCell: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  tableBody: {
-    flex: 1,
-  },
-  dataTableRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    backgroundColor: '#FFFFFF',
-    minHeight: 80,
-  },
-  selectedRow: {
-    backgroundColor: '#FEF2F2',
-    borderLeftWidth: 3,
-    borderLeftColor: '#DC2626',
-  },
-  employeeInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#DC2626',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  employeeDetails: {
-    flex: 1,
-    paddingVertical: 2,
-  },
-  employeeName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  employeeId: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  employeeRole: {
-    fontSize: 11,
-    color: '#64748B',
-  },
-  
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  actionButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 6,
-    backgroundColor: '#F8FAFC',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionIcon: {
-    margin: 0,
-  },
-  
-  // Essential Missing Styles
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 64,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-  },
-  
-  statusChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    alignSelf: 'flex-start',
-    marginVertical: 2,
-  },
-  statusChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  
-
-  
-  filterIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#EBF8FF',
-    borderRadius: 6,
-    borderLeftWidth: 3,
-    borderLeftColor: '#3B82F6',
-  },
-  filterIndicatorText: {
-    fontSize: 13,
-    color: '#1E40AF',
-    fontWeight: '500',
-  },
-  clearFilterButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  clearFilterText: {
-    fontSize: 12,
-    color: '#3B82F6',
-    fontWeight: '600',
-    textDecorationLine: 'underline',
-  },
-  
-  tableContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    margin: 0,
-    height: '80vh', // Fixed height to use more screen space
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  pageTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 8,
-  },
-  headerControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  entriesControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 24,
-  },
-  entriesLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-    marginRight: 8,
-  },
-  entriesDropdown: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    height: 36,
-    width: 80,
-    marginHorizontal: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-  },
-  entriesDropdownText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  entriesDropdownArrow: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  entriesText: {
-    fontSize: 14,
-    color: '#64748B',
-    marginLeft: 8,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  filterControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginRight: 16,
-  },
-  filterDropdown: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    height: 40,
-    width: 120,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-  },
-  filterDropdownText: {
-    fontSize: 14,
-    color: '#374151',
-    flex: 1,
-  },
-  filterDropdownArrow: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  
+  // TABLE STYLES (FIXED)
   dataTable: {
-    flex: 1,
-    flexDirection: 'column',
-    minWidth: 1000,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    elevation: 2,
+    marginTop: 12,
+    minWidth: 1200,
   },
   dataTableHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: '#E2E8F0',
-    borderBottomWidth: 2,
-    borderBottomColor: '#CBD5E1',
+    backgroundColor: '#f8f9fa',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   columnHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#495057',
   },
-  
-  // Column Widths - Adjusted to reduce gap between employee and trade columns, increased space between nationality and passport
-  checkboxColumn: { width: 50, alignItems: 'center' },
-  employeeColumn: { flex: 1, minWidth: 120, paddingRight: 8, maxWidth: 180 }, // Reduced padding and added max width
-  tradeColumn: { width: 100, paddingLeft: 8 }, // Further reduced width
-  nationalityColumn: { width: 160, paddingRight: 8 }, // Increased width for header to fit "NATIONALITY" on single line
-  passportColumn: { width: 120, paddingLeft: 8 }, // Adjusted padding
-  labourcardColumn: { width: 100 }, // Reduced width
-  eidColumn: { width: 80 }, // Reduced width
-  wccColumn: { width: 80 }, // Reduced width
-  expiryColumn: { width: 100 }, // Reduced width
-  visaStatusColumn: { width: 100, alignItems: 'center' }, // Reduced width
-  
+  dataTableRow: {
+    flexDirection: 'row',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f9fa',
+    alignItems: 'center',
+    minHeight: 32,
+  },
+  selectedRow: {
+    backgroundColor: '#E3F2FD',
+  },
+  checkboxColumn: {
+    width: 40,
+    alignItems: 'center',
+  },
+  employeeColumn: {
+    width: 160,
+  },
+  tradeColumn: {
+    width: 100,
+  },
+  nationalityColumn: {
+    width: 100,
+  },
+  passportColumn: {
+    width: 100,
+  },
+  labourcardColumn: {
+    width: 100,
+  },
+  eidColumn: {
+    width: 80,
+  },
+  wccColumn: {
+    width: 80,
+  },
+  expiryColumn: {
+    width: 100,
+  },
+  visaStatusColumn: {
+    width: 100,
+    alignItems: 'center',
+  },
+  actionsColumn: {
+    width: 80,
+    alignItems: 'center',
+  },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 3,
+    width: 16,
+    height: 16,
     borderWidth: 2,
-    borderColor: '#CBD5E1',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#dee2e6',
+    borderRadius: 3,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkmark: {
-    fontSize: 12,
+    color: '#2563EB',
+    fontSize: 10,
     fontWeight: 'bold',
-    color: '#DC2626',
   },
-  
-  
   cellText: {
-    fontSize: 12,
-    color: '#374151',
-    textAlign: 'center',
-    paddingVertical: 4,
-    lineHeight: 18,
-  },
-  
-  // New styles for search header and clickable employee name
-  searchHeaderControls: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  searchBar: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    elevation: 0,
-  },
-  addEmployeeButton: {
-    minWidth: 120,
-  },
-  clickableEmployeeName: {
-    color: CONSISTENT_COLORS.primary,
-    textDecorationLine: 'underline',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    fontSize: 10,
+    color: '#495057',
   },
   horizontalScrollContainer: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+  },
+  // TABLE HEADER STYLES
+  tableContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    elevation: 2,
+    marginTop: 12,
+    marginHorizontal: 16,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  titleContainer: {
+    marginBottom: 6,
+  },
+  pageTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  employeeCount: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  entriesControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  entriesLabel: {
+    fontSize: 12,
+    color: '#666666',
+    marginRight: 6,
+  },
+  entriesDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 6,
+  },
+  entriesDropdownText: {
+    fontSize: 12,
+    color: '#1a1a1a',
+    marginRight: 3,
+  },
+  entriesDropdownArrow: {
+    fontSize: 8,
+    color: '#666666',
+  },
+  entriesText: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+  },
+  filterControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  filterDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    maxWidth: 120,
+  },
+  filterDropdownText: {
+    fontSize: 12,
+    color: '#1a1a1a',
+    marginRight: 3,
+    flex: 1,
+  },
+  filterDropdownArrow: {
+    fontSize: 8,
+    color: '#666666',
+  },
+  filterIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterIndicatorText: {
+    fontSize: 10,
+    color: '#666666',
+    marginRight: 6,
+  },
+  clearFilterButton: {
+    backgroundColor: '#dc3545',
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  clearFilterText: {
+    fontSize: 10,
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  tableBody: {
+    maxHeight: 500,
+  },
+  // SEARCH STYLES
+  searchHeaderControls: {
+    backgroundColor: '#ffffff',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  searchBar: {
+    flex: 1,
+    marginRight: 8,
+    backgroundColor: '#f8f9fa',
+  },
+  addEmployeeButton: {
+    backgroundColor: '#2563EB',
+  },
+  content: {
+    flex: 1,
+  },
+  fab: {
+    position: 'absolute',
+    margin: 12,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#2563EB',
+  },
+  snackbar: {
+    backgroundColor: '#2563EB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+  },
+  // PAGINATION STYLES
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  paginationInfo: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  paginationControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  paginationButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginHorizontal: 2,
+    borderRadius: 4,
+    backgroundColor: '#f8f9fa',
+  },
+  paginationButtonActive: {
+    backgroundColor: '#2563EB',
+  },
+  paginationButtonText: {
+    fontSize: 12,
+    color: '#666666',
+  },
+  paginationButtonTextActive: {
+    color: '#ffffff',
   },
 });
+
 

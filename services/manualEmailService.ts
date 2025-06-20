@@ -119,17 +119,21 @@ const replaceVariables = (template: string, employee: Employee, additionalVars: 
     company_name: employee.company_name || 'Company',
     nationality: employee.nationality || 'N/A',
     mobile_number: employee.mobile_number || 'N/A',
+    date_of_birth: employee.date_of_birth || 'N/A',
+    home_phone_number: employee.home_phone_number || null,
+    company_id: employee.company_id || 'N/A',
     join_date: employee.join_date ? new Date(employee.join_date).toLocaleDateString() : 'N/A',
     visa_expiry_date: employee.visa_expiry_date ? new Date(employee.visa_expiry_date).toLocaleDateString() : 'N/A',
-    passport_number: employee.passport_number || 'N/A',
+    passport_number: employee.passport_no || 'N/A',
     visa_status: employee.visa_status || 'N/A',
+    status: employee.status || 'active',
     ...additionalVars
   };
 
   // Replace all variables
   Object.entries(variables).forEach(([key, value]) => {
     const regex = new RegExp(`{{${key}}}`, 'g');
-    result = result.replace(regex, value.toString());
+    result = result.replace(regex, (value || '').toString());
   });
 
   // Clean up any remaining unreplaced variables
@@ -385,10 +389,14 @@ export const previewEmail = (
     company_name: sampleEmployee?.company_name || 'CUBS TECH CONTRACTING',
     nationality: sampleEmployee?.nationality || 'Indian',
     mobile_number: sampleEmployee?.mobile_number || '+971501234567',
+    date_of_birth: sampleEmployee?.date_of_birth || '1990-01-01',
+    home_phone_number: null,
+    company_id: sampleEmployee?.company_id || 'cubs_tech',
     join_date: sampleEmployee?.join_date || '2023-01-01',
     visa_expiry_date: sampleEmployee?.visa_expiry_date || '2025-12-31',
-    passport_number: sampleEmployee?.passport_number || 'A12345678',
+    passport_no: sampleEmployee?.passport_no || 'A12345678',
     visa_status: sampleEmployee?.visa_status || 'ACTIVE',
+    status: sampleEmployee?.status || 'active',
     is_active: true,
     created_at: new Date().toISOString()
   };

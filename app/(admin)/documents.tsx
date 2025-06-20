@@ -96,7 +96,7 @@ function AdminDocumentsScreen() {
   useEffect(() => {
     // Only load documents if employees are available
     if (employees && employees.length > 0) {
-      loadDocuments();
+    loadDocuments();
     }
   }, [employees]);
 
@@ -347,32 +347,32 @@ function AdminDocumentsScreen() {
   );
 
   const renderEmployeeTile = (employee: EmployeeFolder) => (
-    <TouchableOpacity 
-      key={employee.id}
-      style={[styles.tile, { backgroundColor: theme.colors.surface }]}
+      <TouchableOpacity 
+        key={employee.id}
+        style={[styles.tile, { backgroundColor: theme.colors.surface }]}
       onPress={() => navigateToFolder(employee.id, employee.name)}
-    >
-      <View style={styles.tileContent}>
-        <View style={styles.tileIcon}>
-          <IconButton
-            icon="folder-account"
-            size={48}
-            iconColor={CONSISTENT_COLORS.folder}
-            style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
-          />
-        </View>
-        <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
-          {employee.name}
-        </Text>
-        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
-          {employee.trade}
-        </Text>
-        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+      >
+        <View style={styles.tileContent}>
+          <View style={styles.tileIcon}>
+            <IconButton
+              icon="folder-account"
+              size={48}
+              iconColor={CONSISTENT_COLORS.folder}
+              style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
+            />
+          </View>
+          <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
+            {employee.name}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {employee.trade}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
           {employee.documentCount} documents
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
 
   const renderDocumentTile = (document: Document) => {
     const fileIcon = getFileIcon(document.fileName);
@@ -413,35 +413,35 @@ function AdminDocumentsScreen() {
   };
 
   const renderCustomFolderTile = (folder: CustomFolder) => (
-    <TouchableOpacity 
-      key={folder.id}
+      <TouchableOpacity 
+        key={folder.id}
       style={[styles.tile, { backgroundColor: theme.colors.surface }]}
       onPress={() => navigateToFolder(folder.id, folder.name)}
-    >
-      <View style={styles.tileContent}>
-        <View style={styles.tileIcon}>
-          <IconButton
-            icon="folder"
-            size={48}
-            iconColor={CONSISTENT_COLORS.folder}
-            style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
-          />
+      >
+        <View style={styles.tileContent}>
+          <View style={styles.tileIcon}>
+            <IconButton
+              icon="folder"
+              size={48}
+              iconColor={CONSISTENT_COLORS.folder}
+              style={{ backgroundColor: CONSISTENT_COLORS.folder + '15' }}
+            />
+          </View>
+          <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
+            {folder.name}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {folder.documentCount} documents
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {formatFileSize(folder.totalSize)}
+          </Text>
+          <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
+            {folder.createdAt.toLocaleDateString()}
+          </Text>
         </View>
-        <Text variant="titleSmall" style={[styles.tileName, { color: theme.colors.onSurface }]} numberOfLines={3} ellipsizeMode="tail">
-          {folder.name}
-        </Text>
-        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
-          {folder.documentCount} documents
-        </Text>
-        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
-          {formatFileSize(folder.totalSize)}
-        </Text>
-        <Text variant="bodySmall" style={[styles.tileInfo, { color: theme.colors.onSurfaceVariant }]}>
-          {folder.createdAt.toLocaleDateString()}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
 
   const renderBreadcrumb = () => {
     if (breadcrumb.length === 0) return null;
@@ -457,7 +457,7 @@ function AdminDocumentsScreen() {
             <Text style={styles.breadcrumbItem}>{item}</Text>
           </React.Fragment>
         ))}
-      </View>
+            </View>
     );
   };
 
@@ -467,35 +467,35 @@ function AdminDocumentsScreen() {
     <AdminLayout title="Documents" currentRoute="/admin/documents">
       <View style={styles.container}>
         <Surface style={styles.headerSurface} elevation={2}>
-          <Searchbar
+            <Searchbar
             placeholder="Search..."
-            onChangeText={setSearchQuery}
-            value={searchQuery}
+              onChangeText={setSearchQuery}
+              value={searchQuery}
             style={styles.searchbar}
           />
           {renderBreadcrumb()}
           {breadcrumb.length > 0 && (
-            <Button 
-              mode="outlined" 
-              onPress={navigateBack}
+            <Button
+              mode="outlined"
+                onPress={navigateBack}
               icon="arrow-left"
-              style={styles.backButton}
+                style={styles.backButton}
             >
               Back
             </Button>
           )}
         </Surface>
-        
+
         <View style={{flex: 1}}>
           {loading ? (
             <ActivityIndicator animating={true} style={{ flex: 1, justifyContent: 'center' }} />
           ) : (
             <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}>
               {(folders.length === 0 && currentDocuments.length === 0) && !loading ? (
-                <View style={styles.emptyState}>
+                        <View style={styles.emptyState}>
                   <Text>No items found.</Text>
-                </View>
-              ) : (
+                        </View>
+                      ) : (
                 <View style={styles.gridContainer}>
                   {folders.map(item => {
                     if ('employees' in item) {
@@ -507,11 +507,11 @@ function AdminDocumentsScreen() {
                     }
                   })}
                   {currentDocuments.map(doc => renderDocumentTile(doc))}
-                </View>
-              )}
+                        </View>
+                      )}
             </ScrollView>
           )}
-        </View>
+                          </View>
 
         <Portal>
           <FAB
@@ -521,17 +521,17 @@ function AdminDocumentsScreen() {
             label="New Folder"
           />
         </Portal>
-        
+
         <Portal>
           <Modal visible={newFolderModalVisible} onDismiss={() => setNewFolderModalVisible(false)} contentContainerStyle={styles.modalContainerStyle}>
               <Card style={styles.modalCardStyle}>
                 <Card.Title title="Create New Folder" />
                 <Card.Content>
-                  <TextInput 
+                <TextInput
                     label="Folder Name" 
-                    value={newFolderName} 
-                    onChangeText={setNewFolderName} 
-                    mode="outlined" 
+                  value={newFolderName}
+                  onChangeText={setNewFolderName}
+                  mode="outlined"
                   />
                 </Card.Content>
                 <Card.Actions>
@@ -555,12 +555,15 @@ function AdminDocumentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
   headerSurface: { padding: 12, backgroundColor: 'white' },
   searchbar: { marginBottom: 12 },
   breadcrumbContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
     paddingHorizontal: 4,
   },
@@ -580,13 +583,13 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
   gridContainer: { 
-    flexDirection: 'row', 
+    flexDirection: 'row',
     flexWrap: 'wrap', 
-    padding: 16, 
+    padding: 16,
     justifyContent: 'space-around',
   },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, minHeight: 200 },
-  fab: { 
+  fab: {
     position: 'absolute',
     margin: 16,
     right: 0,

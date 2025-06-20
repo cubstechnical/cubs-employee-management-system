@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Dimensions, ScrollView, BackHandler, Animated, Platform, Image } from 'react-native';
+import { View, StyleSheet, Dimensions, ScrollView, BackHandler, Animated, Platform, Image, TouchableOpacity, Alert } from 'react-native';
 import {
   Appbar,
   Drawer,
@@ -14,39 +14,21 @@ import {
   Divider,
   Avatar,
   Badge,
+  List,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
+import { useNotificationCounts } from '../hooks/useNotificationCounts';
 import { useAppTheme } from './ThemeProvider';
 import { CustomTheme } from '../theme';
 import { safeThemeAccess } from '../utils/errorPrevention';
 import SecuritySettings from './SecuritySettings';
+import { getDeviceInfo } from '../utils/mobileUtils';
 
 const { width } = Dimensions.get('window');
 const SIDEBAR_WIDTH = 320;
-
-// ENHANCED: Logo import with multiple fallback options - REMOVED
-// const getLogo = () => {
-//   try {
-//     // Try primary logo first
-//     return require('../assets/logo.png');
-//   } catch (error) {
-//     try {
-//       // Try alternative logos
-//       return require('../assets/logo2.png');
-//     } catch (error2) {
-//       try {
-//         return require('../assets/logo123.png');
-//       } catch (error3) {
-//         console.warn('No logo images found in AdminLayout, using text fallback');
-//         return null;
-//       }
-//     }
-//   }
-// };
-
-// const logoImage = getLogo();
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -54,6 +36,15 @@ interface AdminLayoutProps {
   currentRoute: string;
   showBackButton?: boolean;
   onBackPress?: () => void;
+  showSearch?: boolean;
+  showBreadcrumbs?: boolean;
+  quickActions?: Array<{
+    icon: string;
+    label: string;
+    onPress: () => void;
+    color?: string;
+    badge?: number;
+  }>;
 }
 
 export default function AdminLayout({ 
@@ -61,7 +52,10 @@ export default function AdminLayout({
   title, 
   currentRoute, 
   showBackButton = false,
-  onBackPress 
+  onBackPress,
+  showSearch = true,
+  showBreadcrumbs = true,
+  quickActions = []
 }: AdminLayoutProps) {
   const [sidebarVisible, setSidebarVisible] = useState(width > 768);
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -73,6 +67,10 @@ export default function AdminLayout({
   const theme = useTheme() as CustomTheme;
   const { isDarkMode, toggleTheme } = useAppTheme();
   const { user, logout } = useAuth();
+  const { counts: notificationCounts, loading: countsLoading } = useNotificationCounts();
+  const { isPhone, isTablet } = getDeviceInfo();
+  
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Update mobile state on window resize
   useEffect(() => {
@@ -147,21 +145,21 @@ export default function AdminLayout({
       icon: 'file-document-multiple',
       route: '/(admin)/documents',
       active: currentRoute.includes('documents'),
-      badge: null,
+      badge: notificationCounts.pendingDocuments > 0 ? notificationCounts.pendingDocuments.toString() : null,
     },
     {
       label: 'Notifications',
       icon: 'bell',
       route: '/(admin)/notifications',
       active: currentRoute.includes('notifications'),
-      badge: '3', // Dynamic badge
+      badge: notificationCounts.notifications > 0 ? notificationCounts.notifications.toString() : null,
     },
     {
       label: 'User Approvals',
       icon: 'account-check',
       route: '/(admin)/approvals',
       active: currentRoute.includes('approvals'),
-      badge: '2', // Dynamic badge
+      badge: notificationCounts.userApprovals > 0 ? notificationCounts.userApprovals.toString() : null,
     },
   ];
 
@@ -201,6 +199,141 @@ export default function AdminLayout({
   const toggleSidebar = () => {
     setSidebarVisible(!sidebarVisible);
   };
+
+  // Breadcrumb generation
+  const generateBreadcrumbs = (route: string) => {
+    const routeParts = route.split('/').filter(Boolean);
+    const breadcrumbs = [{ label: 'Dashboard', path: '/(admin)/dashboard', icon: 'home' }];
+    
+    let currentPath = '';
+    routeParts.forEach((part, index) => {
+      currentPath += `/${part}`;
+      
+      let label = part.charAt(0).toUpperCase() + part.slice(1);
+      let icon = '';
+      
+      switch (part) {
+        case 'admin':
+          return; // Skip admin part
+        case 'employees':
+          label = 'Employees';
+          icon = 'account-group';
+          break;
+        case 'documents':
+          label = 'Documents';
+          icon = 'file-document';
+          break;
+        case 'approvals':
+          label = 'Approvals';
+          icon = 'account-check';
+          break;
+        case 'notifications':
+          label = 'Notifications';
+          icon = 'bell';
+          break;
+        case 'new':
+          label = 'Add New';
+          icon = 'plus';
+          break;
+        default:
+          if (part.match(/^\d+$/)) {
+            label = 'Details';
+            icon = 'eye';
+          }
+      }
+      
+      breadcrumbs.push({
+        label,
+        path: currentPath,
+        icon
+      });
+    });
+    
+    return breadcrumbs;
+  };
+
+  // Search suggestions
+  const searchSuggestions = [
+    {
+      type: 'employee' as const,
+      title: 'Search Employees',
+      subtitle: 'Find employees by name, ID, or trade',
+      icon: 'account-search',
+      onSelect: () => router.push('/(admin)/employees')
+    },
+    {
+      type: 'document' as const,
+      title: 'Document Management',
+      subtitle: 'Upload and manage documents',
+      icon: 'file-upload',
+      onSelect: () => router.push('/(admin)/documents')
+    },
+    {
+      type: 'action' as const,
+      title: 'Add New Employee',
+      subtitle: 'Create a new employee record',
+      icon: 'account-plus',
+      onSelect: () => router.push('/(admin)/employees/new')
+    },
+    {
+      type: 'action' as const,
+      title: 'Bulk Operations',
+      subtitle: 'Perform bulk actions on employees',
+      icon: 'format-list-bulleted',
+      onSelect: () => router.push('/(admin)/employees?bulk=true')
+    },
+    {
+      type: 'department' as const,
+      title: 'User Approvals',
+      subtitle: 'Review pending user registrations',
+      icon: 'account-check',
+      onSelect: () => router.push('/(admin)/approvals')
+    }
+  ];
+
+  // Default quick actions
+  const defaultQuickActions = [
+    {
+      icon: 'account-plus',
+      label: 'Add Employee',
+      onPress: () => router.push('/(admin)/employees/new'),
+      color: '#22c55e'
+    },
+    {
+      icon: 'bell',
+      label: 'Notifications',
+      onPress: () => router.push('/(admin)/notifications'),
+      color: '#f59e0b',
+      badge: notificationCounts.notifications
+    },
+    {
+      icon: 'account-check',
+      label: 'Approvals',
+      onPress: () => router.push('/(admin)/approvals'),
+      color: '#3b82f6',
+      badge: notificationCounts.userApprovals
+    },
+    {
+      icon: 'file-document',
+      label: 'Documents',
+      onPress: () => router.push('/(admin)/documents'),
+      color: '#8b5cf6',
+      badge: notificationCounts.pendingDocuments
+    }
+  ];
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    // Implement search logic here
+    console.log('Searching for:', query);
+  };
+
+  const handleBreadcrumbNavigation = (path: string) => {
+    router.push(path as any);
+  };
+
+  const breadcrumbs = generateBreadcrumbs(currentRoute);
+  const combinedQuickActions = [...defaultQuickActions, ...quickActions];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: safeThemeAccess.colors(theme, 'background') }]}>
@@ -548,7 +681,7 @@ export default function AdminLayout({
           </Surface>
 
           {/* Page Content */}
-          <View style={styles.pageContent}>
+          <View style={[styles.pageContent, { backgroundColor: safeThemeAccess.colors(theme, 'background') }]}>
             {children}
           </View>
         </View>

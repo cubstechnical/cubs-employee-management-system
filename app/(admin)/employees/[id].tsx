@@ -130,7 +130,7 @@ export default function EmployeeDetailsScreen() {
             company_name: employeeByEmployeeId.company_name || '',
             join_date: formatDateDDMMYYYY(employeeByEmployeeId.join_date || employeeByEmployeeId.joining_date || ''),
             visa_expiry_date: formatDateDDMMYYYY(employeeByEmployeeId.visa_expiry_date || ''),
-            passport_no: employeeByEmployeeId.passport_no || employeeByEmployeeId.passport_number || '',
+            passport_no: employeeByEmployeeId.passport_no || '',
             labourcard_no: employeeByEmployeeId.labourcard_no || '',
             eid: employeeByEmployeeId.eid || '',
             wcc: employeeByEmployeeId.wcc || '',
@@ -165,7 +165,7 @@ export default function EmployeeDetailsScreen() {
             company_name: directEmployee.company_name || '',
             join_date: formatDateDDMMYYYY(directEmployee.join_date || directEmployee.joining_date || ''),
             visa_expiry_date: formatDateDDMMYYYY(directEmployee.visa_expiry_date || ''),
-            passport_no: directEmployee.passport_no || directEmployee.passport_number || '',
+            passport_no: directEmployee.passport_no || '',
             labourcard_no: directEmployee.labourcard_no || '',
             eid: directEmployee.eid || '',
             wcc: directEmployee.wcc || '',
@@ -213,7 +213,7 @@ export default function EmployeeDetailsScreen() {
         company_name: foundEmployee.company_name || '',
         join_date: formatDateDDMMYYYY(foundEmployee.join_date || foundEmployee.joining_date || ''),
         visa_expiry_date: formatDateDDMMYYYY(foundEmployee.visa_expiry_date || ''),
-        passport_no: foundEmployee.passport_no || foundEmployee.passport_number || '',
+        passport_no: foundEmployee.passport_no || '',
         labourcard_no: foundEmployee.labourcard_no || '',
         eid: foundEmployee.eid || '',
         wcc: foundEmployee.wcc || '',
@@ -460,7 +460,7 @@ export default function EmployeeDetailsScreen() {
           />
           <List.Item
             title="Passport Number"
-            description={employee.passport_number || 'No passport number'}
+            description={employee.passport_no || 'No passport number'}
             left={(props) => <List.Icon {...props} icon="passport" color={theme.colors.primary} />}
             style={styles.listItem}
             titleStyle={{ color: theme.colors.onSurface, fontWeight: '500' }}
@@ -731,8 +731,8 @@ export default function EmployeeDetailsScreen() {
                 
                 <TextInput
                   label="Passport Number"
-                  value={values.passport_number}
-                  onChangeText={handleChange('passport_number')}
+                  value={values.passport_no}
+                  onChangeText={handleChange('passport_no')}
                   style={styles.input}
                   mode="outlined"
                   left={<TextInput.Icon icon="passport" />}
@@ -915,12 +915,12 @@ export default function EmployeeDetailsScreen() {
             value={formData.date_of_birth ? new Date(formData.date_of_birth) : new Date()}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, selectedDate) => {
+            onDateChange={(dateString: string) => {
               setShowBirthDatePicker(false);
-              if (selectedDate) {
+              if (dateString) {
                 setFormData({
                   ...formData,
-                  date_of_birth: selectedDate.toISOString().split('T')[0]
+                  date_of_birth: dateString
                 });
               }
             }}
@@ -929,16 +929,13 @@ export default function EmployeeDetailsScreen() {
 
         {showJoinDatePicker && (
           <WebDatePicker
-            value={formData.join_date ? new Date(formData.join_date) : new Date()}
+            value={formData.join_date || ''}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, selectedDate) => {
+            onDateChange={(dateString: string) => {
               setShowJoinDatePicker(false);
-              if (selectedDate) {
-                setFormData({
-                  ...formData,
-                  join_date: selectedDate.toISOString().split('T')[0]
-                });
+              if (dateString) {
+                setFormData({ ...formData, join_date: dateString });
               }
             }}
           />
@@ -949,12 +946,12 @@ export default function EmployeeDetailsScreen() {
             value={formData.visa_expiry_date ? new Date(formData.visa_expiry_date) : new Date()}
             mode="date"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={(event, selectedDate) => {
+            onDateChange={(dateString: string) => {
               setShowVisaDatePicker(false);
-              if (selectedDate) {
+              if (dateString) {
                 setFormData({
                   ...formData,
-                  visa_expiry_date: selectedDate.toISOString().split('T')[0]
+                  visa_expiry_date: dateString
                 });
               }
             }}
